@@ -610,7 +610,7 @@ export const usePOSStore = create<POSState>()(
     const { cart, activeCustomer, payMethod, emitDTE, dteType, user, config } = get();
     if (cart.length === 0) return false;
 
-    let statusDte = 'idle';
+    let statusDte: 'idle' | 'processing' | 'success' | 'contingencia' = 'idle';
     let controlNum = `DTE-${dteType === 'CF' ? '01' : '03'}-M001-${Math.floor(100000000 + Math.random() * 900000000)}`;
 
     const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.qty, 0);
