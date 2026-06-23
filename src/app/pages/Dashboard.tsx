@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { usePOSStore } from "../store/usePOSStore";
 import { KPI, Badge, Btn, $, status } from "../components/Primitives";
+import { hasAccess } from "../App";
 
 export default function Dashboard({ onNav }: { onNav: (p: any) => void }) {
   const {
@@ -64,7 +65,7 @@ export default function Dashboard({ onNav }: { onNav: (p: any) => void }) {
         <KPI icon={DollarSign}    value={kpis.sales} label="Ventas hoy"       trend="En tiempo real" trendUp />
         <KPI icon={ShoppingCart}  value={kpis.txs}   label="Transacciones"   trend="Hoy" trendUp />
         <KPI icon={Star}          value={kpis.top}   label="Producto top hoy" />
-        <KPI icon={AlertTriangle} value={`${lowStock.length} alertas`} label="Productos con stock bajo" warn onClick={() => onNav("inventario")} />
+        <KPI icon={AlertTriangle} value={`${lowStock.length} alertas`} label="Productos con stock bajo" warn onClick={hasAccess(user?.role || "Cajero", "inventario") ? () => onNav("inventario") : undefined} />
       </div>
 
       {/* Charts row */}
@@ -112,36 +113,38 @@ export default function Dashboard({ onNav }: { onNav: (p: any) => void }) {
 
       {/* Bottom row */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <div className="lg:col-span-3 bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-[#0F172A] text-sm">Stock bajo — requiere atención</h3>
-            <Btn v="ghost" sz="xs" onClick={() => onNav("inventario")}>Ver todos <ChevronRight size={11} /></Btn>
+        {hasAccess(user?.role || "Cajero", "inventario") && (
+          <div className="lg:col-span-3 bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-[#0F172A] text-sm">Stock bajo — requiere atención</h3>
+              <Btn v="ghost" sz="xs" onClick={() => onNav("inventario")}>Ver todos <ChevronRight size={11} /></Btn>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-[#F1F5F9]">
+                  {["Producto", "Stock actual", "Mínimo", ""].map(h => <th key={h} className="text-left pb-2 text-xs font-semibold text-[#94A3B8]">{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {lowStock.slice(0, 5).map(p => (
+                    <tr key={p.id} className="border-b border-[#F8FAFC] hover:bg-slate-50 transition-colors">
+                      <td className="py-2.5 font-semibold text-[#0F172A]">{p.name}</td>
+                      <td className="py-2.5 tabular-nums"><span className={p.stock === 0 ? "text-red-600 font-bold" : "text-amber-600 font-bold"}>{p.stock}</span></td>
+                      <td className="py-2.5 tabular-nums text-[#94A3B8]">{p.minStock}</td>
+                      <td className="py-2.5"><Btn v="secondary" sz="xs" onClick={() => onNav("compras")}>Reabastecer</Btn></td>
+                    </tr>
+                  ))}
+                  {lowStock.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="text-center py-6 text-sm text-[#94A3B8]">🎉 ¡Todo el stock está normal!</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-[#F1F5F9]">
-                {["Producto", "Stock actual", "Mínimo", ""].map(h => <th key={h} className="text-left pb-2 text-xs font-semibold text-[#94A3B8]">{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {lowStock.slice(0, 5).map(p => (
-                  <tr key={p.id} className="border-b border-[#F8FAFC] hover:bg-slate-50 transition-colors">
-                    <td className="py-2.5 font-semibold text-[#0F172A]">{p.name}</td>
-                    <td className="py-2.5 tabular-nums"><span className={p.stock === 0 ? "text-red-600 font-bold" : "text-amber-600 font-bold"}>{p.stock}</span></td>
-                    <td className="py-2.5 tabular-nums text-[#94A3B8]">{p.minStock}</td>
-                    <td className="py-2.5"><Btn v="secondary" sz="xs" onClick={() => onNav("compras")}>Reabastecer</Btn></td>
-                  </tr>
-                ))}
-                {lowStock.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="text-center py-6 text-sm text-[#94A3B8]">🎉 ¡Todo el stock está normal!</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        )}
 
-        <div className="lg:col-span-2 bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm">
+        <div className={`${hasAccess(user?.role || "Cajero", "inventario") ? "lg:col-span-2" : "lg:col-span-5"} bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm`}>
           <h3 className="font-bold text-[#0F172A] text-sm mb-4">Accesos rápidos</h3>
           <div className="grid grid-cols-2 gap-2.5">
             {[
@@ -149,7 +152,7 @@ export default function Dashboard({ onNav }: { onNav: (p: any) => void }) {
               { label: "Agregar Producto", icon: Plus,         page: "productos",     bg: "bg-emerald-50 text-emerald-700" },
               { label: "Ver Reportes",     icon: BarChart2,    page: "reportes",      bg: "bg-violet-50 text-violet-700" },
               { label: "Configuración",    icon: Settings,     page: "configuracion", bg: "bg-slate-100 text-[#64748B]" },
-            ].map(q => (
+            ].filter(q => hasAccess(user?.role || "Cajero", q.page as any)).map(q => (
               <button key={q.label} onClick={() => onNav(q.page)}
                 className="flex flex-col items-center gap-2 p-3.5 rounded-xl border border-[#E2E8F0] hover:border-[#1B4FD8]/40 hover:shadow-sm hover:bg-[#EEF2FF]/20 transition-all group">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${q.bg}`}><q.icon size={18} /></div>

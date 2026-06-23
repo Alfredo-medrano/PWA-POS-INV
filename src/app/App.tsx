@@ -28,6 +28,17 @@ import { DTEPill, Btn, Input, Badge } from "./components/Primitives";
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Page = "login" | "setup" | "dashboard" | "pos" | "inventario" | "productos" | "compras" | "clientes" | "reportes" | "configuracion";
 
+export function hasAccess(role: string, page: Page): boolean {
+  if (role === "Administrador") return true;
+  if (role === "Supervisor") {
+    return page !== "configuracion";
+  }
+  if (role === "Cajero") {
+    return page === "dashboard" || page === "pos" || page === "clientes";
+  }
+  return false;
+}
+
 // ─── Nav Configuration ────────────────────────────────────────────────────────
 const NAV = [
   { id: "dashboard",    label: "Dashboard",    icon: LayoutDashboard },
@@ -43,6 +54,10 @@ const NAV = [
 // ─── Sidebar Component ────────────────────────────────────────────────────────
 function Sidebar({ page, onNav, slim, onToggle }: { page: Page; onNav: (p: Page) => void; slim: boolean; onToggle: () => void }) {
   const logout = usePOSStore(state => state.logout);
+  const user = usePOSStore(state => state.user);
+  const role = user?.role || "Cajero";
+  const allowedNav = NAV.filter(item => hasAccess(role, item.id as Page));
+
   return (
     <aside className={`hidden md:flex flex-col fixed inset-y-0 left-0 z-30 bg-white border-r border-[#E2E8F0] transition-[width] duration-200 ease-out ${slim ? "w-[60px]" : "w-[180px]"}`}>
       <div className={`flex items-center h-[60px] border-b border-[#E2E8F0] transition-all ${slim ? "justify-center px-0" : "px-4 justify-between"}`}>
@@ -59,7 +74,7 @@ function Sidebar({ page, onNav, slim, onToggle }: { page: Page; onNav: (p: Page)
         </button>
       </div>
       <nav className="flex-1 overflow-y-auto py-2 space-y-0.5 px-2">
-        {NAV.map(({ id, label, icon: Icon }) => {
+        {allowedNav.map(({ id, label, icon: Icon }) => {
           const active = page === id;
           return (
             <button key={id} onClick={() => onNav(id as Page)} title={slim ? label : undefined}
@@ -118,17 +133,21 @@ function TopBar({ dte, onMenu }: { dte: boolean; onMenu: () => void }) {
   );
 }
 
-// ─── BottomNav Component ──────────────────────────────────────────────────────
 function BottomNav({ page, onNav }: { page: Page; onNav: (p: Page) => void }) {
+  const user = usePOSStore(state => state.user);
+  const role = user?.role || "Cajero";
   const items = [
     { id: "dashboard", label: "Inicio",   icon: Home       },
     { id: "pos",       label: "Vender",   icon: ShoppingCart },
     { id: "inventario",label: "Stock",    icon: Package     },
     { id: "reportes",  label: "Reportes", icon: BarChart2   },
   ] as const;
+
+  const allowedItems = items.filter(item => hasAccess(role, item.id as Page));
+
   return (
     <nav className="fixed bottom-0 inset-x-0 z-30 md:hidden bg-white/90 backdrop-blur-md border-t border-[#E2E8F0] flex h-16">
-      {items.map(({ id, label, icon: Icon }) => (
+      {allowedItems.map(({ id, label, icon: Icon }) => (
         <button key={id} onClick={() => onNav(id as Page)}
           className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-colors ${page === id ? "text-[#1B4FD8]" : "text-[#CBD5E1]"}`}>
           <Icon size={20} />
@@ -139,11 +158,13 @@ function BottomNav({ page, onNav }: { page: Page; onNav: (p: Page) => void }) {
   );
 }
 
-// ─── Layout Wrapper ───────────────────────────────────────────────────────────
 function Layout({ page, onNav, children, dte, slim, onSlim }: {
   page: Page; onNav: (p: Page) => void; children: React.ReactNode;
   dte: boolean; slim: boolean; onSlim: () => void;
 }) {
+  const user = usePOSStore(state => state.user);
+  const role = user?.role || "Cajero";
+  const allowedNav = NAV.filter(item => hasAccess(role, item.id as Page));
   const [mob, setMob] = useState(false);
   const pad = slim ? "md:pl-[60px]" : "md:pl-[180px]";
   return (
@@ -160,7 +181,7 @@ function Layout({ page, onNav, children, dte, slim, onSlim }: {
               <button onClick={() => setMob(false)} className="text-[#94A3B8] hover:text-[#64748B]"><X size={18} /></button>
             </div>
             <nav className="flex-1 py-3 px-3 space-y-0.5">
-              {NAV.map(({ id, label, icon: Icon }) => (
+              {allowedNav.map(({ id, label, icon: Icon }) => (
                 <button key={id} onClick={() => { onNav(id as Page); setMob(false); }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${page === id ? "bg-[#EEF2FF] text-[#1B4FD8] font-semibold" : "text-[#64748B] hover:bg-slate-50"}`}>
                   <Icon size={16} />{label}
@@ -629,6 +650,21 @@ export default function App() {
     init();
   }, [user]);
 
+  useEffect(() => {
+    if (user && page !== "login" && page !== "setup" && !hasAccess(user.role, page)) {
+      toast.error(`Acceso denegado: tu rol de ${user.role} no tiene permisos para acceder a esta sección.`);
+      setPage("dashboard");
+    }
+  }, [page, user]);
+
+  const handleNav = (targetPage: Page) => {
+    if (user && !hasAccess(user.role, targetPage)) {
+      toast.error(`Acceso denegado: tu rol de ${user.role} no tiene permisos para acceder a esta sección.`);
+      return;
+    }
+    setPage(targetPage);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
@@ -666,10 +702,10 @@ export default function App() {
   }
 
   return (
-    <Layout page={page} onNav={setPage} dte={dteConnected} slim={slim} onSlim={() => setSlim(s => !s)}>
-      {page === "dashboard"    && <Dashboard onNav={setPage} />}
+    <Layout page={page} onNav={handleNav} dte={dteConnected} slim={slim} onSlim={() => setSlim(s => !s)}>
+      {page === "dashboard"    && <Dashboard onNav={handleNav} />}
       {page === "pos"          && <POS dteConnected={dteConnected} />}
-      {page === "inventario"   && <Inventory onNav={setPage} />}
+      {page === "inventario"   && <Inventory onNav={handleNav} />}
       {page === "productos"    && <Products />}
       {page === "compras"      && <Purchases />}
       {page === "clientes"     && <Customers />}
