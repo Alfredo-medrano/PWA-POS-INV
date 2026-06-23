@@ -32,6 +32,57 @@ export interface Customer {
   lastBuy?: string;
 }
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  phone?: string;
+  nrc?: string;
+  email?: string;
+  last_buy?: string;
+}
+
+export interface Purchase {
+  id: string;
+  supplierId?: string;
+  sup: string;
+  date: string;
+  n: number;
+  total: number;
+  s: string;
+  items?: any[];
+}
+
+export interface BusinessConfig {
+  bizName: string;
+  bizType?: string;
+  bizPhone?: string;
+  bizAddress?: string;
+  dteUrl?: string;
+  dteKey?: string;
+}
+
+export interface DashboardStats {
+  salesToday: number;
+  txCount: number;
+  topProduct: string;
+  recent: any[];
+  hourly: any[];
+}
+
+export interface ReportsStats {
+  monthly: any[];
+  topProducts: any[];
+  corteCaja: any[];
+}
+
 export interface SalePayload {
   total: number;
   payMethod: string;
@@ -55,6 +106,19 @@ interface POSState {
   recentDteControl: string;
   loadingProducts: boolean;
   loadingCustomers: boolean;
+
+  // Nuevos Estados para Config/Auth/Compras/Analíticas
+  config: BusinessConfig | null;
+  user: User | null;
+  users: User[];
+  suppliers: Supplier[];
+  purchases: Purchase[];
+  dashboardStats: DashboardStats | null;
+  reportsStats: ReportsStats | null;
+  loadingStats: boolean;
+  loadingUsers: boolean;
+  loadingSuppliers: boolean;
+  loadingPurchases: boolean;
 
   // Acciones
   fetchProducts: () => Promise<void>;
@@ -81,6 +145,29 @@ interface POSState {
 
   // Cobro
   processSale: () => Promise<boolean>;
+
+  // Nuevas Acciones
+  fetchConfig: () => Promise<boolean>;
+  saveConfig: (cfg: BusinessConfig) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => void;
+  
+  fetchUsers: () => Promise<void>;
+  createUser: (usr: Omit<User, 'id'> & { password?: string }) => Promise<boolean>;
+  updateUser: (id: string, usr: Partial<User> & { password?: string }) => Promise<boolean>;
+  deleteUser: (id: string) => Promise<boolean>;
+
+  fetchSuppliers: () => Promise<void>;
+  createSupplier: (sup: Omit<Supplier, 'id' | 'last_buy'>) => Promise<boolean>;
+  updateSupplier: (id: string, sup: Omit<Supplier, 'id' | 'last_buy'>) => Promise<boolean>;
+  deleteSupplier: (id: string) => Promise<boolean>;
+
+  fetchPurchases: () => Promise<void>;
+  createPurchase: (purchase: { supplierId: string, supplierName: string, items: any[], status: string, total: number }) => Promise<boolean>;
+  receivePurchase: (id: string) => Promise<boolean>;
+
+  fetchDashboardStats: () => Promise<void>;
+  fetchReportsStats: () => Promise<void>;
 }
 
 export const usePOSStore = create<POSState>((set, get) => ({
@@ -96,6 +183,19 @@ export const usePOSStore = create<POSState>((set, get) => ({
   recentDteControl: '',
   loadingProducts: false,
   loadingCustomers: false,
+
+  // Inicializar Nuevos Estados
+  config: null,
+  user: JSON.parse(localStorage.getItem('pos_user') || 'null'),
+  users: [],
+  suppliers: [],
+  purchases: [],
+  dashboardStats: null,
+  reportsStats: null,
+  loadingStats: false,
+  loadingUsers: false,
+  loadingSuppliers: false,
+  loadingPurchases: false,
 
   fetchProducts: async () => {
     set({ loadingProducts: true });
@@ -251,8 +351,214 @@ export const usePOSStore = create<POSState>((set, get) => ({
     }
   },
 
+  // Configuración
+  fetchConfig: async () => {
+    try {
+      const res = await axios.get('/api/configuracion');
+      if (res.data && res.data.bizName) {
+        set({ config: res.data });
+        return true;
+      }
+      set({ config: null });
+      return false;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  saveConfig: async (cfg) => {
+    try {
+      await axios.post('/api/configuracion', cfg);
+      set({ config: cfg });
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  // Autenticación
+  login: async (email, password) => {
+    try {
+      const res = await axios.post('/api/auth/login', { email, password });
+      set({ user: res.data });
+      localStorage.setItem('pos_user', JSON.stringify(res.data));
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  logout: () => {
+    set({ user: null });
+    localStorage.removeItem('pos_user');
+  },
+
+  // Usuarios CRUD
+  fetchUsers: async () => {
+    set({ loadingUsers: true });
+    try {
+      const res = await axios.get('/api/usuarios');
+      set({ users: res.data, loadingUsers: false });
+    } catch (err) {
+      console.error(err);
+      set({ loadingUsers: false });
+    }
+  },
+
+  createUser: async (usr) => {
+    try {
+      await axios.post('/api/usuarios', usr);
+      await get().fetchUsers();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  updateUser: async (id, usr) => {
+    try {
+      await axios.put(`/api/usuarios/${id}`, usr);
+      await get().fetchUsers();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  deleteUser: async (id) => {
+    try {
+      await axios.delete(`/api/usuarios/${id}`);
+      await get().fetchUsers();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  // Proveedores CRUD
+  fetchSuppliers: async () => {
+    set({ loadingSuppliers: true });
+    try {
+      const res = await axios.get('/api/proveedores');
+      set({ suppliers: res.data, loadingSuppliers: false });
+    } catch (err) {
+      console.error(err);
+      set({ loadingSuppliers: false });
+    }
+  },
+
+  createSupplier: async (sup) => {
+    try {
+      await axios.post('/api/proveedores', sup);
+      await get().fetchSuppliers();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  updateSupplier: async (id, sup) => {
+    try {
+      await axios.put(`/api/proveedores/${id}`, sup);
+      await get().fetchSuppliers();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  deleteSupplier: async (id) => {
+    try {
+      await axios.delete(`/api/proveedores/${id}`);
+      await get().fetchSuppliers();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  // Compras (Órdenes)
+  fetchPurchases: async () => {
+    set({ loadingPurchases: true });
+    try {
+      const res = await axios.get('/api/compras');
+      set({ purchases: res.data, loadingPurchases: false });
+    } catch (err) {
+      console.error(err);
+      set({ loadingPurchases: false });
+    }
+  },
+
+  createPurchase: async (purchase) => {
+    try {
+      await axios.post('/api/compras', purchase);
+      await get().fetchPurchases();
+      await get().fetchProducts();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  receivePurchase: async (id) => {
+    try {
+      await axios.put(`/api/compras/${id}/recepcion`);
+      await get().fetchPurchases();
+      await get().fetchProducts();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  // Analíticas
+  fetchDashboardStats: async () => {
+    set({ loadingStats: true });
+    try {
+      const res = await axios.get('/api/dashboard/stats');
+      set({ dashboardStats: res.data, loadingStats: false });
+    } catch (err) {
+      console.error(err);
+      set({ loadingStats: false });
+    }
+  },
+
+  fetchReportsStats: async () => {
+    set({ loadingStats: true });
+    try {
+      const [monthlyRes, productsRes, corteRes] = await Promise.all([
+        axios.get('/api/reportes/ventas'),
+        axios.get('/api/reportes/productos-top'),
+        axios.get('/api/reportes/corte-caja')
+      ]);
+      set({
+        reportsStats: {
+          monthly: monthlyRes.data,
+          topProducts: productsRes.data,
+          corteCaja: corteRes.data
+        },
+        loadingStats: false
+      });
+    } catch (err) {
+      console.error(err);
+      set({ loadingStats: false });
+    }
+  },
+
+  // Proceso de Venta
   processSale: async () => {
-    const { cart, activeCustomer, payMethod, emitDTE, dteType } = get();
+    const { cart, activeCustomer, payMethod, emitDTE, dteType, user } = get();
     if (cart.length === 0) return false;
 
     set({ dteStatus: emitDTE ? 'processing' : 'idle' });
@@ -261,10 +567,11 @@ export const usePOSStore = create<POSState>((set, get) => ({
     const iva = subtotal * 0.13;
     const total = subtotal + iva;
 
-    // Simular el DTE y su número de control
     const controlNum = `DTE-${dteType === 'CF' ? '01' : '03'}-M001-${Math.floor(100000000 + Math.random() * 900000000)}`;
 
     const rawDteJson = {
+      cajeroId: user?.id || '1',
+      cajeroName: user?.name || 'Cajero General',
       identificacion: {
         version: dteType === 'CF' ? 1 : 3,
         numeroControl: controlNum,
@@ -284,7 +591,6 @@ export const usePOSStore = create<POSState>((set, get) => ({
       }
     };
 
-    // Estado DTE simulado
     const statusDte = emitDTE ? (Math.random() > 0.08 ? 'success' : 'contingencia') : 'idle';
 
     const payload: SalePayload = {
@@ -298,16 +604,13 @@ export const usePOSStore = create<POSState>((set, get) => ({
     };
 
     try {
-      // Registrar en Neon a través de la API local
       await axios.post('/api/ventas', payload);
       
-      // Actualizar estado del DTE en el frontend
       set({ 
         dteStatus: statusDte === 'success' ? 'success' : statusDte === 'contingencia' ? 'contingencia' : 'idle',
         recentDteControl: controlNum
       });
 
-      // Refrescar inventario y clientes
       await get().fetchProducts();
       await get().fetchCustomers();
       return true;

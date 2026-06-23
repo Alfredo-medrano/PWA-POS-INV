@@ -71,9 +71,63 @@ async function initDatabase() {
       )
     `);
 
+    // 4. Tabla de Configuracion (Ajustes de negocio y DTE)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS configuracion (
+        id VARCHAR(50) PRIMARY KEY,
+        biz_name VARCHAR(255) NOT NULL,
+        biz_type VARCHAR(100),
+        biz_phone VARCHAR(50),
+        biz_address TEXT,
+        dte_url TEXT,
+        dte_key TEXT,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 5. Tabla de Usuarios (Cajeros y Administradores)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL DEFAULT 'Cajero',
+        status VARCHAR(50) NOT NULL DEFAULT 'Activo',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 6. Tabla de Proveedores
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS proveedores (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        phone VARCHAR(50),
+        nrc VARCHAR(50),
+        email VARCHAR(255),
+        last_buy VARCHAR(50),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 7. Tabla de Compras (Abastecimiento de stock)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS compras (
+        id VARCHAR(36) PRIMARY KEY,
+        supplier_id VARCHAR(36),
+        supplier_name VARCHAR(255) NOT NULL,
+        items_count INTEGER DEFAULT 0,
+        total DECIMAL(12,2) DEFAULT 0.00,
+        status VARCHAR(50) NOT NULL DEFAULT 'Pendiente',
+        items_json JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log('✅ Estructura de tablas inicializada.');
 
-    // 4. Semillar productos si la tabla está vacía
+    // 8. Semillar productos si la tabla está vacía
     const prodRes = await client.query('SELECT COUNT(*) FROM productos');
     if (parseInt(prodRes.rows[0].count) === 0) {
       console.log('🌱 Semillando productos iniciales...');
@@ -100,7 +154,7 @@ async function initDatabase() {
       console.log('✅ Productos semillados.');
     }
 
-    // 5. Semillar clientes si la tabla está vacía
+    // 9. Semillar clientes si la tabla está vacía
     const cliRes = await client.query('SELECT COUNT(*) FROM clientes');
     if (parseInt(cliRes.rows[0].count) === 0) {
       console.log('🌱 Semillando clientes iniciales...');
@@ -116,6 +170,60 @@ async function initDatabase() {
         `, c);
       }
       console.log('✅ Clientes semillados.');
+    }
+
+    // 10. Semillar usuarios si la tabla está vacía
+    const userRes = await client.query('SELECT COUNT(*) FROM usuarios');
+    if (parseInt(userRes.rows[0].count) === 0) {
+      console.log('🌱 Semillando usuarios iniciales...');
+      const hashedPw = crypto.createHash('sha256').update('contraseña123').digest('hex');
+      const mockUsers = [
+        ["1", "Carlos Gomez", "carlos@mitienda.com.sv", hashedPw, "Administrador", "Activo"],
+        ["2", "Ana Martinez", "ana@mitienda.com.sv", hashedPw, "Cajero", "Activo"]
+      ];
+      for (const u of mockUsers) {
+        await client.query(`
+          INSERT INTO usuarios (id, name, email, password, role, status)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, u);
+      }
+      console.log('✅ Usuarios semillados.');
+    }
+
+    // 11. Semillar proveedores si la tabla está vacía
+    const provRes = await client.query('SELECT COUNT(*) FROM proveedores');
+    if (parseInt(provRes.rows[0].count) === 0) {
+      console.log('🌱 Semillando proveedores iniciales...');
+      const mockSuppliers = [
+        ["1", "Distribuidora Central", "2222-4455", "11223-4", "contacto@distcentral.com.sv", "20/06/2025"],
+        ["2", "Proveedor Lácteos SV", "7788-9900", "55667-8", "ventas@lacteos.com.sv", "18/06/2025"],
+        ["3", "Bebidas del Norte", "2233-1122", "99001-2", "pedidos@bebidasnorte.com.sv", "15/06/2025"]
+      ];
+      for (const s of mockSuppliers) {
+        await client.query(`
+          INSERT INTO proveedores (id, name, phone, nrc, email, last_buy)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, s);
+      }
+      console.log('✅ Proveedores semillados.');
+    }
+
+    // 12. Semillar compras si la tabla está vacía
+    const compRes = await client.query('SELECT COUNT(*) FROM compras');
+    if (parseInt(compRes.rows[0].count) === 0) {
+      console.log('🌱 Semillando compras iniciales...');
+      const mockPurchases = [
+        ["OC-001", "1", "Distribuidora Central", 8, 450.80, "Recibida", JSON.stringify([{ product_id: "1", product_name: "Coca-Cola 2L", price: 1.20, qty: 375 }])],
+        ["OC-002", "2", "Proveedor Lácteos SV", 4, 180.00, "Pendiente", JSON.stringify([{ product_id: "3", product_name: "Leche Entera 1L", price: 0.90, qty: 200 }])],
+        ["OC-003", "3", "Bebidas del Norte", 12, 890.50, "Recibida", JSON.stringify([{ product_id: "7", product_name: "Pepsi 2L", price: 1.10, qty: 810 }])]
+      ];
+      for (const cp of mockPurchases) {
+        await client.query(`
+          INSERT INTO compras (id, supplier_id, supplier_name, items_count, total, status, items_json)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, cp);
+      }
+      console.log('✅ Compras semilladas.');
     }
 
   } catch (err) {
@@ -359,6 +467,543 @@ app.post('/api/ventas', async (req, res) => {
     res.status(500).json({ error: err.message || 'Error interno al procesar la venta' });
   } finally {
     client.release();
+  }
+});
+
+
+// ========================================
+// ENDPOINTS: AUTENTICACION
+// ========================================
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const hashedPw = crypto.createHash('sha256').update(password).digest('hex');
+    const result = await pool.query('SELECT * FROM usuarios WHERE email = $1 AND password = $2', [email, hashedPw]);
+    if (result.rowCount === 0) {
+      return res.status(401).json({ error: 'Credenciales inválidas o usuario inactivo' });
+    }
+    const u = result.rows[0];
+    if (u.status !== 'Activo') {
+      return res.status(403).json({ error: 'El usuario está inactivo' });
+    }
+    res.json({ id: u.id, name: u.name, email: u.email, role: u.role, status: u.status });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error en inicio de sesión' });
+  }
+});
+
+// ========================================
+// ENDPOINTS: CONFIGURACION (NEGOCIO)
+// ========================================
+app.get('/api/configuracion', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM configuracion LIMIT 1');
+    if (result.rowCount === 0) {
+      return res.json({});
+    }
+    const r = result.rows[0];
+    res.json({
+      bizName: r.biz_name,
+      bizType: r.biz_type,
+      bizPhone: r.biz_phone,
+      bizAddress: r.biz_address,
+      dteUrl: r.dte_url,
+      dteKey: r.dte_key
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener configuración' });
+  }
+});
+
+app.post('/api/configuracion', async (req, res) => {
+  const { bizName, bizType, bizPhone, bizAddress, dteUrl, dteKey } = req.body;
+  try {
+    const check = await pool.query('SELECT id FROM configuracion LIMIT 1');
+    if (check.rowCount > 0) {
+      const id = check.rows[0].id;
+      await pool.query(`
+        UPDATE configuracion
+        SET biz_name = $1, biz_type = $2, biz_phone = $3, biz_address = $4, dte_url = $5, dte_key = $6, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $7
+      `, [bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null, id]);
+      res.json({ success: true, message: 'Configuración actualizada' });
+    } else {
+      const id = 'single';
+      await pool.query(`
+        INSERT INTO configuracion (id, biz_name, biz_type, biz_phone, biz_address, dte_url, dte_key)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [id, bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null]);
+      res.status(201).json({ success: true, message: 'Configuración creada' });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al guardar configuración' });
+  }
+});
+
+// ========================================
+// ENDPOINTS: USUARIOS (CRUD)
+// ========================================
+app.get('/api/usuarios', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, name, email, role, status FROM usuarios ORDER BY name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener usuarios' });
+  }
+});
+
+app.post('/api/usuarios', async (req, res) => {
+  const { name, email, password, role, status } = req.body;
+  const id = crypto.randomUUID();
+  try {
+    const hashedPw = crypto.createHash('sha256').update(password).digest('hex');
+    await pool.query(`
+      INSERT INTO usuarios (id, name, email, password, role, status)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [id, name, email, hashedPw, role || 'Cajero', status || 'Activo']);
+    res.status(201).json({ id, name, email, role, status });
+  } catch (err) {
+    console.error(err);
+    if (err.code === '23505') {
+      res.status(400).json({ error: 'El correo electrónico ya está en uso' });
+    } else {
+      res.status(500).json({ error: 'Error al crear usuario' });
+    }
+  }
+});
+
+app.put('/api/usuarios/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, email, password, role, status } = req.body;
+  try {
+    let query = `
+      UPDATE usuarios
+      SET name = $1, email = $2, role = $3, status = $4
+      WHERE id = $5
+      RETURNING id, name, email, role, status
+    `;
+    let params = [name, email, role, status, id];
+    
+    if (password) {
+      const hashedPw = crypto.createHash('sha256').update(password).digest('hex');
+      query = `
+        UPDATE usuarios
+        SET name = $1, email = $2, role = $3, status = $4, password = $5
+        WHERE id = $6
+        RETURNING id, name, email, role, status
+      `;
+      params = [name, email, role, status, hashedPw, id];
+    }
+    
+    const result = await pool.query(query, params);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al actualizar usuario' });
+  }
+});
+
+app.delete('/api/usuarios/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM usuarios WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    res.json({ message: 'Usuario eliminado' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al eliminar usuario' });
+  }
+});
+
+// ========================================
+// ENDPOINTS: PROVEEDORES (CRUD)
+// ========================================
+app.get('/api/proveedores', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM proveedores ORDER BY name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener proveedores' });
+  }
+});
+
+app.post('/api/proveedores', async (req, res) => {
+  const { name, phone, nrc, email } = req.body;
+  const id = crypto.randomUUID();
+  try {
+    await pool.query(`
+      INSERT INTO proveedores (id, name, phone, nrc, email, last_buy)
+      VALUES ($1, $2, $3, $4, $5, NULL)
+    `, [id, name, phone || null, nrc || null, email || null]);
+    res.status(201).json({ id, name, phone, nrc, email, last_buy: null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al crear proveedor' });
+  }
+});
+
+app.put('/api/proveedores/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, phone, nrc, email } = req.body;
+  try {
+    const result = await pool.query(`
+      UPDATE proveedores
+      SET name = $1, phone = $2, nrc = $3, email = $4
+      WHERE id = $5
+      RETURNING *
+    `, [name, phone || null, nrc || null, email || null, id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Proveedor no encontrado' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al actualizar proveedor' });
+  }
+});
+
+app.delete('/api/proveedores/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM proveedores WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Proveedor no encontrado' });
+    }
+    res.json({ message: 'Proveedor eliminado' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al eliminar proveedor' });
+  }
+});
+
+// ========================================
+// ENDPOINTS: COMPRAS (ORDENES)
+// ========================================
+app.get('/api/compras', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM compras ORDER BY created_at DESC');
+    const list = result.rows.map(r => ({
+      id: r.id,
+      supplierId: r.supplier_id,
+      sup: r.supplier_name,
+      date: new Date(r.created_at).toLocaleDateString("es-SV", { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      n: parseInt(r.items_count),
+      total: parseFloat(r.total),
+      s: r.status,
+      items: r.items_json
+    }));
+    res.json(list);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener compras' });
+  }
+});
+
+app.post('/api/compras', async (req, res) => {
+  const { supplierId, supplierName, items, status, total } = req.body;
+  const id = `OC-${Math.floor(100 + Math.random() * 900)}`;
+  const itemsCount = items.reduce((s, i) => s + parseInt(i.qty), 0);
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    await client.query(`
+      INSERT INTO compras (id, supplier_id, supplier_name, items_count, total, status, items_json)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [id, supplierId, supplierName, itemsCount, parseFloat(total) || 0.00, status || 'Pendiente', JSON.stringify(items)]);
+
+    if (status === 'Recibida') {
+      for (const item of items) {
+        await client.query(`
+          UPDATE productos
+          SET stock = stock + $1, cost = $2, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $3
+        `, [parseInt(item.qty), parseFloat(item.cost), item.productId]);
+      }
+      
+      const today = new Date().toLocaleDateString("es-SV", { day: '2-digit', month: '2-digit', year: 'numeric' });
+      await client.query(`
+        UPDATE proveedores
+        SET last_buy = $1
+        WHERE id = $2
+      `, [today, supplierId]);
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ id, supplierId, supplierName, itemsCount, total, status });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Error al registrar compra' });
+  } finally {
+    client.release();
+  }
+});
+
+app.put('/api/compras/:id/recepcion', async (req, res) => {
+  const { id } = req.params;
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const compRes = await client.query('SELECT * FROM compras WHERE id = $1', [id]);
+    if (compRes.rowCount === 0) {
+      throw new Error('Orden de compra no encontrada');
+    }
+    
+    const c = compRes.rows[0];
+    if (c.status === 'Recibida') {
+      throw new Error('La orden ya fue recibida anteriormente');
+    }
+    
+    await client.query('UPDATE compras SET status = \'Recibida\' WHERE id = $1', [id]);
+    
+    const items = c.items_json || [];
+    for (const item of items) {
+      await client.query(`
+        UPDATE productos
+        SET stock = stock + $1, cost = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+      `, [parseInt(item.qty), parseFloat(item.cost), item.product_id || item.productId]);
+    }
+    
+    if (c.supplier_id) {
+      const today = new Date().toLocaleDateString("es-SV", { day: '2-digit', month: '2-digit', year: 'numeric' });
+      await client.query(`
+        UPDATE proveedores
+        SET last_buy = $1
+        WHERE id = $2
+      `, [today, c.supplier_id]);
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Orden de compra recibida con éxito' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: err.message || 'Error al recibir compra' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========================================
+// ENDPOINTS: ANALITICAS (DASHBOARD & REPORTS)
+// ========================================
+app.get('/api/dashboard/stats', async (req, res) => {
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const salesRes = await pool.query(`
+      SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count 
+      FROM ventas 
+      WHERE created_at >= $1
+    `, [startOfToday]);
+    const salesToday = parseFloat(salesRes.rows[0].total);
+    const txCount = parseInt(salesRes.rows[0].count);
+
+    const recentRes = await pool.query(`
+      SELECT total, pay_method, raw_dte_json, created_at
+      FROM ventas
+      ORDER BY created_at DESC
+      LIMIT 5
+    `);
+    const recent = recentRes.rows.map(r => {
+      const time = new Date(r.created_at).toLocaleTimeString("es-SV", { hour: '2-digit', minute: '2-digit', hour12: false });
+      const cashierName = r.raw_dte_json?.cajeroName || "Cajero General";
+      return {
+        time,
+        cashier: cashierName,
+        amount: parseFloat(r.total),
+        method: r.pay_method
+      };
+    });
+
+    const allTodaySales = await pool.query(`
+      SELECT total, created_at 
+      FROM ventas 
+      WHERE created_at >= $1
+    `, [startOfToday]);
+
+    const hourlyMap = {
+      "7am": 0, "8am": 0, "9am": 0, "10am": 0, "11am": 0, "12pm": 0,
+      "1pm": 0, "2pm": 0, "3pm": 0, "4pm": 0, "5pm": 0, "6pm": 0
+    };
+
+    allTodaySales.rows.forEach(s => {
+      const date = new Date(s.created_at);
+      const hour = date.getHours();
+      let label = "";
+      if (hour === 7) label = "7am";
+      else if (hour === 8) label = "8am";
+      else if (hour === 9) label = "9am";
+      else if (hour === 10) label = "10am";
+      else if (hour === 11) label = "11am";
+      else if (hour === 12) label = "12pm";
+      else if (hour === 13) label = "1pm";
+      else if (hour === 14) label = "2pm";
+      else if (hour === 15) label = "3pm";
+      else if (hour === 16) label = "4pm";
+      else if (hour === 17) label = "5pm";
+      else if (hour === 18) label = "6pm";
+      
+      if (label) {
+        hourlyMap[label] += parseFloat(s.total);
+      }
+    });
+
+    const hourly = Object.keys(hourlyMap).map(k => ({ h: k, v: parseFloat(hourlyMap[k].toFixed(2)) }));
+
+    let productCounts = {};
+    allTodaySales.rows.forEach(s => {
+      const details = s.raw_dte_json?.detalles || [];
+      details.forEach(d => {
+        const name = d.descripcion;
+        const qty = parseInt(d.cantidad) || 0;
+        productCounts[name] = (productCounts[name] || 0) + qty;
+      });
+    });
+
+    let topProduct = "Ninguno";
+    let topProductSales = 0;
+    Object.keys(productCounts).forEach(name => {
+      if (productCounts[name] > topProductSales) {
+        topProduct = name;
+        topProductSales = productCounts[name];
+      }
+    });
+
+    res.json({
+      salesToday,
+      txCount,
+      topProduct: topProductSales > 0 ? `${topProduct} — ${topProductSales} ventas` : "Ninguno — 0 ventas",
+      recent,
+      hourly
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener estadísticas del dashboard' });
+  }
+});
+
+app.get('/api/reportes/ventas', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT created_at, total FROM ventas
+      WHERE created_at >= NOW() - INTERVAL '6 months'
+      ORDER BY created_at ASC
+    `);
+
+    const monthsShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const monthlyMap = {};
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const mLabel = monthsShort[d.getMonth()];
+      monthlyMap[mLabel] = 0;
+    }
+
+    result.rows.forEach(r => {
+      const mLabel = monthsShort[new Date(r.created_at).getMonth()];
+      if (monthlyMap[mLabel] !== undefined) {
+        monthlyMap[mLabel] += parseFloat(r.total);
+      }
+    });
+
+    const monthly = Object.keys(monthlyMap).map(k => ({ m: k, v: parseFloat(monthlyMap[k].toFixed(2)) }));
+
+    res.json(monthly);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener reportes mensuales' });
+  }
+});
+
+app.get('/api/reportes/productos-top', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT raw_dte_json, total FROM ventas');
+    const productAgg = {};
+
+    result.rows.forEach(r => {
+      const details = r.raw_dte_json?.detalles || [];
+      details.forEach(d => {
+        const name = d.descripcion;
+        const qty = parseInt(d.cantidad) || 0;
+        const rev = parseFloat(d.monto) || 0;
+        if (!productAgg[name]) {
+          productAgg[name] = { u: 0, rev: 0 };
+        }
+        productAgg[name].u += qty;
+        productAgg[name].rev += rev;
+      });
+    });
+
+    const list = Object.keys(productAgg).map(name => ({
+      name,
+      u: productAgg[name].u,
+      rev: parseFloat(productAgg[name].rev.toFixed(2))
+    }))
+    .sort((a, b) => b.u - a.u)
+    .slice(0, 5);
+
+    res.json(list);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener productos más vendidos' });
+  }
+});
+
+app.get('/api/reportes/corte-caja', async (req, res) => {
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0,0,0,0);
+
+    const result = await pool.query(`
+      SELECT total, pay_method 
+      FROM ventas 
+      WHERE created_at >= $1
+    `, [startOfToday]);
+
+    let apertura = 200.00;
+    let cash = 0.00;
+    let card = 0.00;
+    let transfer = 0.00;
+    let egresos = 0.00;
+
+    result.rows.forEach(r => {
+      const t = parseFloat(r.total);
+      if (r.pay_method === 'Efectivo') cash += t;
+      else if (r.pay_method === 'Tarjeta') card += t;
+      else if (r.pay_method === 'Transferencia') transfer += t;
+    });
+
+    const totalEsperado = apertura + cash + card + transfer - egresos;
+
+    res.json([
+      { l: "Apertura",         v: apertura,    c: "" },
+      { l: "Ventas efectivo",  v: cash,    c: "" },
+      { l: "Ventas tarjeta",   v: card,    c: "" },
+      { l: "Transferencias",   v: transfer,    c: "" },
+      { l: "Egresos",          v: -egresos,    c: "text-red-600" },
+      { l: "Total esperado",   v: totalEsperado,   c: "text-[#1B4FD8]" },
+    ]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener corte de caja' });
   }
 });
 

@@ -36,6 +36,7 @@ const NAV = [
 
 // ─── Sidebar Component ────────────────────────────────────────────────────────
 function Sidebar({ page, onNav, slim, onToggle }: { page: Page; onNav: (p: Page) => void; slim: boolean; onToggle: () => void }) {
+  const logout = usePOSStore(state => state.logout);
   return (
     <aside className={`hidden md:flex flex-col fixed inset-y-0 left-0 z-30 bg-white border-r border-[#E2E8F0] transition-[width] duration-200 ease-out ${slim ? "w-[60px]" : "w-[180px]"}`}>
       <div className={`flex items-center h-[60px] border-b border-[#E2E8F0] transition-all ${slim ? "justify-center px-0" : "px-4 justify-between"}`}>
@@ -64,7 +65,7 @@ function Sidebar({ page, onNav, slim, onToggle }: { page: Page; onNav: (p: Page)
         })}
       </nav>
       <div className={`px-2 py-3 border-t border-[#E2E8F0] ${slim ? "flex justify-center" : ""}`}>
-        <button className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#DC2626] hover:bg-red-50 transition-all w-full ${slim ? "justify-center" : ""}`}>
+        <button onClick={logout} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#DC2626] hover:bg-red-50 transition-all w-full ${slim ? "justify-center" : ""}`}>
           <LogOut size={14} />
           {!slim && "Cerrar sesión"}
         </button>
@@ -75,6 +76,8 @@ function Sidebar({ page, onNav, slim, onToggle }: { page: Page; onNav: (p: Page)
 
 // ─── TopBar Component ─────────────────────────────────────────────────────────
 function TopBar({ dte, onMenu }: { dte: boolean; onMenu: () => void }) {
+  const user = usePOSStore(state => state.user);
+  const initials = user ? user.name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase() : "CG";
   return (
     <header className="fixed top-0 right-0 left-0 z-20 h-[60px] bg-white/80 backdrop-blur-md border-b border-[#E2E8F0] flex items-center px-4 gap-3">
       <button className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-[#64748B] hover:bg-slate-100 transition-colors" onClick={onMenu}>
@@ -99,8 +102,11 @@ function TopBar({ dte, onMenu }: { dte: boolean; onMenu: () => void }) {
         <Bell size={17} />
         <span className="absolute top-2 right-2 w-2 h-2 bg-[#DC2626] rounded-full ring-2 ring-white" />
       </button>
-      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1B4FD8] to-[#1338A8] flex items-center justify-center text-white text-xs font-bold shadow-sm cursor-pointer">
-        CG
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold text-[#64748B] hidden sm:inline-block">{user?.name}</span>
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1B4FD8] to-[#1338A8] flex items-center justify-center text-white text-xs font-bold shadow-sm cursor-pointer">
+          {initials}
+        </div>
       </div>
     </header>
   );
@@ -169,11 +175,25 @@ function Layout({ page, onNav, children, dte, slim, onSlim }: {
 
 // ─── Login Component ──────────────────────────────────────────────────────────
 function Login({ onLogin }: { onLogin: () => void }) {
+  const login = usePOSStore(state => state.login);
   const [email, setEmail] = useState("carlos@mitienda.com.sv");
   const [pw, setPw] = useState("contraseña123");
   const [show, setShow] = useState(false);
   const [rem, setRem] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleLogin() {
+    setLoading(true);
+    setError(null);
+    const ok = await login(email, pw);
+    setLoading(false);
+    if (ok) {
+      onLogin();
+    } else {
+      setError("Correo o contraseña incorrectos, o cuenta inactiva.");
+    }
+  }
 
   return (
     <div className="min-h-screen flex" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -224,6 +244,13 @@ function Login({ onLogin }: { onLogin: () => void }) {
                 </button>
               </div>
             </div>
+            
+            {error && (
+              <div className="bg-red-50 text-red-700 text-xs font-semibold p-3.5 rounded-xl border border-red-200">
+                {error}
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer text-sm text-[#64748B] font-medium">
                 <input type="checkbox" checked={rem} onChange={e => setRem(e.target.checked)} className="w-4 h-4 accent-[#1B4FD8] rounded" />
@@ -231,7 +258,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
               </label>
               <button className="text-sm text-[#1B4FD8] font-semibold hover:underline">¿Olvidaste tu contraseña?</button>
             </div>
-            <Btn v="primary" sz="lg" full onClick={() => { setLoading(true); setTimeout(onLogin, 900); }} disabled={loading}>
+            <Btn v="primary" sz="lg" full onClick={handleLogin} disabled={loading}>
               {loading ? <><RefreshCw size={14} className="animate-spin" /> Ingresando…</> : "Ingresar"}
             </Btn>
           </div>
@@ -246,9 +273,12 @@ function Login({ onLogin }: { onLogin: () => void }) {
 
 // ─── Onboarding Component ─────────────────────────────────────────────────────
 function Onboarding({ onDone }: { onDone: () => void }) {
+  const saveConfig = usePOSStore(state => state.saveConfig);
   const [step, setStep] = useState(1);
   const [biz, setBiz] = useState("");
   const [type, setType] = useState("Tienda");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
   const [url, setUrl] = useState("");
   const [key, setKey] = useState("");
   const [testing, setTesting] = useState(false);
@@ -258,6 +288,22 @@ function Onboarding({ onDone }: { onDone: () => void }) {
   function testConn() {
     setTesting(true);
     setTimeout(() => { setTesting(false); setOk(true); }, 1600);
+  }
+
+  async function handleFinish() {
+    const success = await saveConfig({
+      bizName: biz,
+      bizType: type,
+      bizPhone: phone,
+      bizAddress: address,
+      dteUrl: url,
+      dteKey: key
+    });
+    if (success) {
+      onDone();
+    } else {
+      alert("Error al guardar la configuración de onboarding.");
+    }
   }
 
   return (
@@ -301,8 +347,8 @@ function Onboarding({ onDone }: { onDone: () => void }) {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Teléfono" placeholder="2222-3344" value="" onChange={() => {}} icon={Phone} />
-                <Input label="Dirección" placeholder="Calle, colonia" value="" onChange={() => {}} icon={MapPin} />
+                <Input label="Teléfono" placeholder="2222-3344" value={phone} onChange={setPhone} icon={Phone} />
+                <Input label="Dirección" placeholder="Calle, colonia" value={address} onChange={setAddress} icon={MapPin} />
               </div>
             </div>
           )}
@@ -343,14 +389,14 @@ function Onboarding({ onDone }: { onDone: () => void }) {
               <h2 className="text-2xl font-bold text-[#0F172A]">Tu sistema está listo</h2>
               <p className="text-sm text-[#64748B]">Completaste la configuración inicial de VentaPOS.</p>
               <div className="bg-slate-50 rounded-xl p-4 text-left space-y-3 ring-1 ring-[#E2E8F0]">
-                {[{ ok: !!biz, label: "Negocio configurado" }, { ok, label: "Sistema DTE conectado" }, { ok: false, label: "Productos en inventario" }].map(i => (
+                {[{ ok: !!biz, label: "Negocio configurado" }, { ok: !!url, label: "Sistema DTE conectado" }, { ok: false, label: "Productos en inventario" }].map(i => (
                   <div key={i.label} className="flex items-center gap-3 text-sm">
                     {i.ok ? <CheckCircle size={16} className="text-emerald-500 shrink-0" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-200 shrink-0" />}
                     <span className={i.ok ? "text-[#0F172A] font-semibold" : "text-[#94A3B8]"}>{i.label}</span>
                   </div>
                 ))}
               </div>
-              <Btn v="primary" sz="lg" full onClick={onDone}>Ir al Dashboard →</Btn>
+              <Btn v="primary" sz="lg" full onClick={handleFinish}>Ir al Dashboard →</Btn>
             </div>
           )}
         </div>
@@ -367,14 +413,64 @@ function Onboarding({ onDone }: { onDone: () => void }) {
 
 // ─── Main App Component ────────────────────────────────────────────────────────
 export default function App() {
+  const { user, config, fetchConfig } = usePOSStore();
   const [page, setPage] = useState<Page>("login");
-  const [auth, setAuth] = useState(false);
-  const [setup, setSetup] = useState(false);
-  const [dteConnected, setDteConnected] = useState(true);
   const [slim, setSlim] = useState(false);
+  const [dteConnected, setDteConnected] = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  if (!auth) return <Login onLogin={() => { setAuth(true); setPage("setup"); }} />;
-  if (!setup) return <Onboarding onDone={() => { setSetup(true); setPage("dashboard"); }} />;
+  useEffect(() => {
+    async function init() {
+      const hasConfig = await fetchConfig();
+      if (user) {
+        if (hasConfig) {
+          setPage("dashboard");
+        } else {
+          setPage("setup");
+        }
+      } else {
+        setPage("login");
+      }
+      setLoading(false);
+    }
+    init();
+  }, [user]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+        <div className="text-center space-y-3">
+          <RefreshCw size={24} className="animate-spin text-[#1B4FD8] mx-auto" />
+          <p className="text-sm font-semibold text-[#64748B]">Cargando VentaPOS...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (page === "login") {
+    return (
+      <Login 
+        onLogin={async () => {
+          const hasConfig = await fetchConfig();
+          if (hasConfig) {
+            setPage("dashboard");
+          } else {
+            setPage("setup");
+          }
+        }} 
+      />
+    );
+  }
+
+  if (page === "setup") {
+    return (
+      <Onboarding 
+        onDone={() => {
+          setPage("dashboard");
+        }} 
+      />
+    );
+  }
 
   return (
     <Layout page={page} onNav={setPage} dte={dteConnected} slim={slim} onSlim={() => setSlim(s => !s)}>

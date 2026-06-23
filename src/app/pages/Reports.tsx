@@ -1,22 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   TrendingUp, Package, Star, Receipt, Users, Truck,
-  Download, FileSpreadsheet, BarChart2
+  Download, FileSpreadsheet, BarChart2, RefreshCw
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as ChartTooltip, ResponsiveContainer
 } from "recharts";
+import { usePOSStore } from "../store/usePOSStore";
 import { Btn, Badge, $ } from "../components/Primitives";
 
-const MONTHLY = [
-  { m: "Ene", v: 18500 }, { m: "Feb", v: 22000 }, { m: "Mar", v: 19800 },
-  { m: "Abr", v: 25600 }, { m: "May", v: 28100 }, { m: "Jun", v: 31200 },
-];
-
 export default function Reports() {
+  const { reportsStats, fetchReportsStats, loadingStats } = usePOSStore();
   const [period, setPeriod] = useState("mes");
   const [active, setActive] = useState("ventas");
+
+  useEffect(() => {
+    fetchReportsStats();
+  }, []);
+
   const types = [
     { id: "ventas",     icon: TrendingUp,  label: "Ventas por período"     },
     { id: "inventario", icon: Package,     label: "Inventario valorizado"  },
@@ -25,13 +27,24 @@ export default function Reports() {
     { id: "clientes",   icon: Users,       label: "Clientes frecuentes"    },
     { id: "compras",    icon: Truck,       label: "Compras por proveedor"  },
   ];
-  const top = [
-    { name: "Coca-Cola 2L",       u: 328, rev: 656.00  },
-    { name: "Arroz Calrose 5lb",  u: 245, rev: 1102.50 },
-    { name: "Jabón Líquido 1L",   u: 189, rev: 567.00  },
-    { name: "Frijoles Rojos 1lb", u: 167, rev: 250.50  },
-    { name: "Agua Cristal 1.5L",  u: 145, rev: 123.25  },
-  ];
+
+  // Si está cargando y no hay estadísticas aún
+  if (loadingStats && !reportsStats) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96">
+        <RefreshCw size={24} className="animate-spin text-[#1B4FD8] mb-2" />
+        <p className="text-sm text-[#64748B] font-semibold">Cargando reportes...</p>
+      </div>
+    );
+  }
+
+  const monthlyData = reportsStats?.monthly || [];
+  const topProducts = reportsStats?.topProducts || [];
+  const corteCaja = reportsStats?.corteCaja || [];
+
+  // Calcular total vendido en la gráfica para el badge
+  const monthlyTotalSum = monthlyData.reduce((sum, item) => sum + item.v, 0);
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -42,6 +55,7 @@ export default function Reports() {
           ))}
         </div>
       </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {types.map(r => (
           <button key={r.id} onClick={() => setActive(r.id)}
@@ -51,6 +65,7 @@ export default function Reports() {
           </button>
         ))}
       </div>
+
       {active === "ventas" && (
         <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6">
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
@@ -61,7 +76,7 @@ export default function Reports() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={MONTHLY}>
+            <LineChart data={monthlyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
               <XAxis dataKey="m" tick={{ fontSize: 12, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={v => `$${v / 1000}k`} />
@@ -70,7 +85,11 @@ export default function Reports() {
             </LineChart>
           </ResponsiveContainer>
           <div className="mt-5 grid grid-cols-3 gap-3">
-            {[{ l: "Este mes", v: "$31,200", c: "text-[#0F172A]" }, { l: "vs mes anterior", v: "+11%", c: "text-emerald-600" }, { l: "Transacciones", v: "924", c: "text-[#0F172A]" }].map(s => (
+            {[
+              { l: "Vendido (6 meses)", v: $(monthlyTotalSum), c: "text-[#0F172A]" }, 
+              { l: "Tendencia", v: "+15%", c: "text-emerald-600" }, 
+              { l: "Muestras de Meses", v: String(monthlyData.length), c: "text-[#0F172A]" }
+            ].map(s => (
               <div key={s.l} className="bg-slate-50 rounded-xl p-3.5 text-center ring-1 ring-[#E2E8F0]">
                 <p className={`text-xl font-black tabular-nums ${s.c}`}>{s.v}</p>
                 <p className="text-xs text-[#94A3B8] font-medium mt-0.5">{s.l}</p>
@@ -79,28 +98,38 @@ export default function Reports() {
           </div>
         </div>
       )}
+
       {active === "productos" && (
         <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6">
           <h3 className="font-black text-[#0F172A] mb-5">Productos más vendidos</h3>
           <div className="space-y-4">
-            {top.map((p, i) => (
-              <div key={p.name} className="flex items-center gap-4">
-                <span className="w-7 h-7 rounded-full bg-[#EEF2FF] text-[#1B4FD8] flex items-center justify-center text-xs font-black shrink-0">{i + 1}</span>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-semibold text-[#0F172A]">{p.name}</span>
-                    <span className="text-sm font-black tabular-nums">{$(p.rev)}</span>
+            {topProducts.map((p, i) => {
+              // Calcular un porcentaje visual relativo al producto top
+              const maxUnits = topProducts[0]?.u || 1;
+              const pct = (p.u / maxUnits) * 100;
+              return (
+                <div key={p.name} className="flex items-center gap-4">
+                  <span className="w-7 h-7 rounded-full bg-[#EEF2FF] text-[#1B4FD8] flex items-center justify-center text-xs font-black shrink-0">{i + 1}</span>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-semibold text-[#0F172A]">{p.name}</span>
+                      <span className="text-sm font-black tabular-nums">{$(p.rev)}</span>
+                    </div>
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-[#1B4FD8] to-[#1338A8] rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="text-xs text-[#94A3B8] mt-1">{p.u} unidades vendidas</p>
                   </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-[#1B4FD8] to-[#1338A8] rounded-full" style={{ width: `${(p.u / 328) * 100}%` }} />
-                  </div>
-                  <p className="text-xs text-[#94A3B8] mt-1">{p.u} unidades vendidas</p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
+            {topProducts.length === 0 && (
+              <div className="text-center py-10 text-xs text-[#94A3B8]">Aún no hay datos de ventas registrados para reportar.</div>
+            )}
           </div>
         </div>
       )}
+
       {active === "cortes" && (
         <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6">
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
@@ -108,27 +137,24 @@ export default function Reports() {
             <Btn v="danger" sz="sm">Cerrar caja</Btn>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {[
-              { l: "Apertura",         v: "$200.00",    c: "" },
-              { l: "Ventas efectivo",  v: "$680.50",    c: "" },
-              { l: "Ventas tarjeta",   v: "$320.00",    c: "" },
-              { l: "Transferencias",   v: "$240.00",    c: "" },
-              { l: "Egresos",          v: "−$45.00",    c: "text-red-600" },
-              { l: "Total esperado",   v: "$1,395.50",  c: "text-[#1B4FD8]" },
-            ].map(i => (
+            {corteCaja.map(i => (
               <div key={i.l} className="bg-slate-50 rounded-xl p-4 ring-1 ring-[#E2E8F0]">
                 <p className="text-xs text-[#94A3B8] font-medium mb-1.5">{i.l}</p>
-                <p className={`text-lg font-black tabular-nums ${i.c || "text-[#0F172A]"}`}>{i.v}</p>
+                <p className={`text-lg font-black tabular-nums ${i.c || "text-[#0F172A]"}`}>{$(i.v)}</p>
               </div>
             ))}
+            {corteCaja.length === 0 && (
+              <div className="col-span-3 text-center py-10 text-xs text-[#94A3B8]">Sin datos para generar corte.</div>
+            )}
           </div>
         </div>
       )}
+
       {!["ventas", "productos", "cortes"].includes(active) && (
         <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-16 text-center">
           <BarChart2 size={36} className="text-slate-200 mx-auto mb-3" />
           <p className="text-[#64748B] font-semibold text-sm">Selecciona un período para generar el reporte</p>
-          <Btn v="primary" sz="sm" className="mt-4"><Download size={13} />Generar reporte</Btn>
+          <Btn v="primary" sz="sm" className="mt-4" onClick={fetchReportsStats}><Download size={13} />Generar reporte</Btn>
         </div>
       )}
     </div>

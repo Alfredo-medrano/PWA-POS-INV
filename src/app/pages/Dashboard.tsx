@@ -1,9 +1,8 @@
 import { useEffect } from "react";
 import {
   ShoppingCart, AlertTriangle, DollarSign, Star,
-  TrendingUp, TrendingDown, CalendarDays, BarChart2,
-  Settings, Plus, ChevronRight, Banknote, CreditCard,
-  Smartphone
+  CalendarDays, BarChart2, Settings, Plus, ChevronRight,
+  Banknote, CreditCard, Smartphone, RefreshCw
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -12,37 +11,49 @@ import {
 import { usePOSStore } from "../store/usePOSStore";
 import { KPI, Badge, Btn, $, status } from "../components/Primitives";
 
-// Datos estáticos para reportes visuales de demostración
-const HOURLY = [
-  { h: "7am", v: 45 }, { h: "8am", v: 120 }, { h: "9am", v: 89 }, { h: "10am", v: 175 },
-  { h: "11am", v: 230 }, { h: "12pm", v: 310 }, { h: "1pm", v: 195 }, { h: "2pm", v: 145 },
-  { h: "3pm", v: 88 }, { h: "4pm", v: 112 }, { h: "5pm", v: 156 }, { h: "6pm", v: 67 },
-];
-
-const RECENT = [
-  { time: "17:42", cashier: "Carlos G.",  amount: 9.61,  method: "Efectivo"      },
-  { time: "17:38", cashier: "Ana M.",     amount: 24.50, method: "Tarjeta"        },
-  { time: "17:31", cashier: "Carlos G.",  amount: 6.25,  method: "Efectivo"      },
-  { time: "17:20", cashier: "Ana M.",     amount: 45.80, method: "Transferencia" },
-  { time: "17:12", cashier: "Carlos G.",  amount: 12.00, method: "Tarjeta"        },
-];
-
 export default function Dashboard({ onNav }: { onNav: (p: any) => void }) {
-  const { products, fetchProducts } = usePOSStore();
+  const {
+    products,
+    fetchProducts,
+    user,
+    dashboardStats,
+    fetchDashboardStats,
+    loadingStats
+  } = usePOSStore();
 
   useEffect(() => {
     fetchProducts();
+    fetchDashboardStats();
   }, []);
 
   const today = new Date().toLocaleDateString("es-SV", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const lowStock = products.filter(p => status(p) !== "ok");
+
+  // Si está cargando por primera vez y no hay estadísticas, mostrar spinner
+  if (loadingStats && !dashboardStats) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96">
+        <RefreshCw size={24} className="animate-spin text-[#1B4FD8] mb-2" />
+        <p className="text-sm text-[#64748B] font-semibold">Cargando estadísticas...</p>
+      </div>
+    );
+  }
+
+  const kpis = {
+    sales: $(dashboardStats?.salesToday || 0),
+    txs: String(dashboardStats?.txCount || 0),
+    top: dashboardStats?.topProduct || "Ninguno — 0 ventas",
+  };
+
+  const hourlyData = dashboardStats?.hourly || [];
+  const recentSales = dashboardStats?.recent || [];
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Buenos días, Carlos 👋</h1>
+          <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Buenos días, {user?.name.split(" ")[0]} 👋</h1>
           <p className="text-sm text-[#64748B] capitalize mt-0.5 flex items-center gap-1.5"><CalendarDays size={13} />{today}</p>
         </div>
         <Btn v="primary" sz="md" onClick={() => onNav("pos")}><Plus size={15} />Nueva Venta</Btn>
@@ -50,9 +61,9 @@ export default function Dashboard({ onNav }: { onNav: (p: any) => void }) {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPI icon={DollarSign}    value="$1,240.50" label="Ventas hoy"       trend="↑ 8% vs ayer" trendUp />
-        <KPI icon={ShoppingCart}  value="47"         label="Transacciones"   trend="↑ 3 más" trendUp />
-        <KPI icon={Star}          value="Coca-Cola 2L" label="Producto top — 85 ventas" />
+        <KPI icon={DollarSign}    value={kpis.sales} label="Ventas hoy"       trend="En tiempo real" trendUp />
+        <KPI icon={ShoppingCart}  value={kpis.txs}   label="Transacciones"   trend="Hoy" trendUp />
+        <KPI icon={Star}          value={kpis.top}   label="Producto top hoy" />
         <KPI icon={AlertTriangle} value={`${lowStock.length} alertas`} label="Productos con stock bajo" warn onClick={() => onNav("inventario")} />
       </div>
 
@@ -61,10 +72,10 @@ export default function Dashboard({ onNav }: { onNav: (p: any) => void }) {
         <div className="lg:col-span-3 bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm">
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-bold text-[#0F172A] text-sm">Ventas por hora — hoy</h3>
-            <Badge color="blue">$1,240.50 total</Badge>
+            <Badge color="blue">{kpis.sales} total</Badge>
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={HOURLY} margin={{ top: 0, right: 0, left: -22, bottom: 0 }}>
+            <BarChart data={hourlyData} margin={{ top: 0, right: 0, left: -22, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
               <XAxis dataKey="h" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
@@ -77,7 +88,7 @@ export default function Dashboard({ onNav }: { onNav: (p: any) => void }) {
         <div className="lg:col-span-2 bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm">
           <h3 className="font-bold text-[#0F172A] text-sm mb-4">Últimas ventas</h3>
           <div className="space-y-3">
-            {RECENT.map((s, i) => (
+            {recentSales.map((s, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
                   {s.method === "Efectivo" ? <Banknote size={13} className="text-[#64748B]" /> : s.method === "Tarjeta" ? <CreditCard size={13} className="text-[#64748B]" /> : <Smartphone size={13} className="text-[#64748B]" />}
@@ -92,6 +103,9 @@ export default function Dashboard({ onNav }: { onNav: (p: any) => void }) {
                 </div>
               </div>
             ))}
+            {recentSales.length === 0 && (
+              <div className="text-center py-10 text-xs text-[#94A3B8]">No hay ventas registradas hoy.</div>
+            )}
           </div>
         </div>
       </div>
