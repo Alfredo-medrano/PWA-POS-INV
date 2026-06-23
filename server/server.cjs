@@ -127,104 +127,8 @@ async function initDatabase() {
 
     console.log('✅ Estructura de tablas inicializada.');
 
-    // 8. Semillar productos si la tabla está vacía
-    const prodRes = await client.query('SELECT COUNT(*) FROM productos');
-    if (parseInt(prodRes.rows[0].count) === 0) {
-      console.log('🌱 Semillando productos iniciales...');
-      const mockProducts = [
-        ["1", "Coca-Cola 2L", "CC2L", "Bebidas", 45, 10, 1.20, 2.00, "https://images.unsplash.com/photo-1554866585-cd94860890b7?w=160&h=160&fit=crop&auto=format"],
-        ["2", "Arroz Calrose 5lb", "AR5", "Granos", 8, 15, 2.80, 4.50, "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=160&h=160&fit=crop&auto=format"],
-        ["3", "Leche Entera 1L", "LE1", "Lácteos", 0, 20, 0.90, 1.50, "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=160&h=160&fit=crop&auto=format"],
-        ["4", "Jabón Líquido 1L", "JL1", "Limpieza", 23, 5, 1.80, 3.00, "https://images.unsplash.com/photo-1584305574647-0cc949a2bb9f?w=160&h=160&fit=crop&auto=format"],
-        ["5", "Frijoles Rojos 1lb", "FJ1", "Granos", 34, 10, 0.80, 1.50, "https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=160&h=160&fit=crop&auto=format"],
-        ["6", "Pan Dulce Unidad", "PD1", "Snacks", 12, 20, 0.25, 0.50, "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=160&h=160&fit=crop&auto=format"],
-        ["7", "Pepsi 2L", "PP2L", "Bebidas", 30, 10, 1.10, 1.90, "https://images.unsplash.com/photo-1629203851122-3726555cf519?w=160&h=160&fit=crop&auto=format"],
-        ["8", "Queso Duro 200g", "QD1", "Lácteos", 7, 8, 3.20, 5.00, "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=160&h=160&fit=crop&auto=format"],
-        ["9", "Azúcar Blanca 5lb", "AZ5", "Granos", 55, 10, 1.50, 2.50, "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=160&h=160&fit=crop&auto=format"],
-        ["10", "Papel Higiénico x4", "PH4", "Limpieza", 18, 15, 2.50, 4.25, "https://images.unsplash.com/photo-1584556812952-905ffd0c611a?w=160&h=160&fit=crop&auto=format"],
-        ["11", "Cereal Zucaritas", "CZ1", "Snacks", 14, 5, 2.90, 4.75, "https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=160&h=160&fit=crop&auto=format"],
-        ["12", "Agua Cristal 1.5L", "AC15", "Bebidas", 60, 20, 0.45, 0.85, "https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=160&h=160&fit=crop&auto=format"]
-      ];
-      for (const p of mockProducts) {
-        await client.query(`
-          INSERT INTO productos (id, name, sku, category, stock, min_stock, cost, price, img)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, p);
-      }
-      console.log('✅ Productos semillados.');
-    }
-
-    // 9. Semillar clientes si la tabla está vacía
-    const cliRes = await client.query('SELECT COUNT(*) FROM clientes');
-    if (parseInt(cliRes.rows[0].count) === 0) {
-      console.log('🌱 Semillando clientes iniciales...');
-      const mockCustomers = [
-        ["1", "María López Díaz", "natural", "0614-010180-101-3", "12345-6", "01234567-8", "7888-1234", "maria@empresa.com.sv", 4580.00, "20/06/2025"],
-        ["2", "Distribuidora San Miguel S.A.", "juridica", "0614-150590-102-1", "98765-4", null, "2222-3344", "compras@distsanmiguel.com.sv", 18420.50, "21/06/2025"],
-        ["3", "Carlos Mendez Ramos", "natural", null, null, "02345678-9", "7755-9988", "carlos.m@gmail.com", 890.75, "18/06/2025"]
-      ];
-      for (const c of mockCustomers) {
-        await client.query(`
-          INSERT INTO clientes (id, name, type, nit, nrc, dui, phone, email, total, last_buy)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        `, c);
-      }
-      console.log('✅ Clientes semillados.');
-    }
-
-    // 10. Semillar usuarios si la tabla está vacía
-    const userRes = await client.query('SELECT COUNT(*) FROM usuarios');
-    if (parseInt(userRes.rows[0].count) === 0) {
-      console.log('🌱 Semillando usuarios iniciales...');
-      const hashedPw = crypto.createHash('sha256').update('contraseña123').digest('hex');
-      const mockUsers = [
-        ["1", "Carlos Gomez", "carlos@mitienda.com.sv", hashedPw, "Administrador", "Activo"],
-        ["2", "Ana Martinez", "ana@mitienda.com.sv", hashedPw, "Cajero", "Activo"]
-      ];
-      for (const u of mockUsers) {
-        await client.query(`
-          INSERT INTO usuarios (id, name, email, password, role, status)
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `, u);
-      }
-      console.log('✅ Usuarios semillados.');
-    }
-
-    // 11. Semillar proveedores si la tabla está vacía
-    const provRes = await client.query('SELECT COUNT(*) FROM proveedores');
-    if (parseInt(provRes.rows[0].count) === 0) {
-      console.log('🌱 Semillando proveedores iniciales...');
-      const mockSuppliers = [
-        ["1", "Distribuidora Central", "2222-4455", "11223-4", "contacto@distcentral.com.sv", "20/06/2025"],
-        ["2", "Proveedor Lácteos SV", "7788-9900", "55667-8", "ventas@lacteos.com.sv", "18/06/2025"],
-        ["3", "Bebidas del Norte", "2233-1122", "99001-2", "pedidos@bebidasnorte.com.sv", "15/06/2025"]
-      ];
-      for (const s of mockSuppliers) {
-        await client.query(`
-          INSERT INTO proveedores (id, name, phone, nrc, email, last_buy)
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `, s);
-      }
-      console.log('✅ Proveedores semillados.');
-    }
-
-    // 12. Semillar compras si la tabla está vacía
-    const compRes = await client.query('SELECT COUNT(*) FROM compras');
-    if (parseInt(compRes.rows[0].count) === 0) {
-      console.log('🌱 Semillando compras iniciales...');
-      const mockPurchases = [
-        ["OC-001", "1", "Distribuidora Central", 8, 450.80, "Recibida", JSON.stringify([{ product_id: "1", product_name: "Coca-Cola 2L", price: 1.20, qty: 375 }])],
-        ["OC-002", "2", "Proveedor Lácteos SV", 4, 180.00, "Pendiente", JSON.stringify([{ product_id: "3", product_name: "Leche Entera 1L", price: 0.90, qty: 200 }])],
-        ["OC-003", "3", "Bebidas del Norte", 12, 890.50, "Recibida", JSON.stringify([{ product_id: "7", product_name: "Pepsi 2L", price: 1.10, qty: 810 }])]
-      ];
-      for (const cp of mockPurchases) {
-        await client.query(`
-          INSERT INTO compras (id, supplier_id, supplier_name, items_count, total, status, items_json)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `, cp);
-      }
-      console.log('✅ Compras semilladas.');
-    }
+    // No realizamos semillado automático para permitir una inicialización limpia desde cero
+    console.log('🌱 Base de datos vacía lista para el registro del negocio.');
 
   } catch (err) {
     console.error('❌ Error inicializando base de datos:', err);
@@ -1004,6 +908,251 @@ app.get('/api/reportes/corte-caja', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener corte de caja' });
+  }
+});
+
+// ========================================
+// ENDPOINTS: SETUP Y MANTENIMIENTO (SISTEMA DESDE CERO)
+// ========================================
+
+// Obtener estado del setup
+app.get('/api/setup/status', async (req, res) => {
+  try {
+    const configRes = await pool.query('SELECT COUNT(*) FROM configuracion');
+    const userRes = await pool.query('SELECT COUNT(*) FROM usuarios');
+    res.json({
+      isConfigured: parseInt(configRes.rows[0].count) > 0,
+      hasUsers: parseInt(userRes.rows[0].count) > 0
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener estado de configuración' });
+  }
+});
+
+// Registrar empresa y administrador inicial (con opción de semillado demo)
+app.post('/api/setup/register', async (req, res) => {
+  const {
+    bizName, bizType, bizPhone, bizAddress, dteUrl, dteKey,
+    adminName, adminEmail, adminPassword, seedDemo
+  } = req.body;
+
+  if (!bizName || !adminName || !adminEmail || !adminPassword) {
+    return res.status(400).json({ error: 'El nombre del negocio, nombre de administrador, correo y contraseña son campos obligatorios.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Crear o actualizar la configuración
+    const configId = 'single';
+    await client.query(`
+      INSERT INTO configuracion (id, biz_name, biz_type, biz_phone, biz_address, dte_url, dte_key)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (id) DO UPDATE 
+      SET biz_name = $2, biz_type = $3, biz_phone = $4, biz_address = $5, dte_url = $6, dte_key = $7, updated_at = CURRENT_TIMESTAMP
+    `, [configId, bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null]);
+
+    // 2. Crear el primer administrador
+    const adminId = crypto.randomUUID();
+    const hashedPw = crypto.createHash('sha256').update(adminPassword).digest('hex');
+    await client.query(`
+      INSERT INTO usuarios (id, name, email, password, role, status)
+      VALUES ($1, $2, $3, $4, 'Administrador', 'Activo')
+      ON CONFLICT (email) DO NOTHING
+    `, [adminId, adminName, adminEmail, hashedPw]);
+
+    // 3. Sembrar datos demo opcionalmente
+    if (seedDemo) {
+      console.log('🌱 Sembrando datos demo solicitados por el onboarding...');
+      
+      // Productos
+      const mockProducts = [
+        ["1", "Coca-Cola 2L", "CC2L", "Bebidas", 45, 10, 1.20, 2.00, "https://images.unsplash.com/photo-1554866585-cd94860890b7?w=160&h=160&fit=crop&auto=format"],
+        ["2", "Arroz Calrose 5lb", "AR5", "Granos", 8, 15, 2.80, 4.50, "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=160&h=160&fit=crop&auto=format"],
+        ["3", "Leche Entera 1L", "LE1", "Lácteos", 0, 20, 0.90, 1.50, "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=160&h=160&fit=crop&auto=format"],
+        ["4", "Jabón Líquido 1L", "JL1", "Limpieza", 23, 5, 1.80, 3.00, "https://images.unsplash.com/photo-1584305574647-0cc949a2bb9f?w=160&h=160&fit=crop&auto=format"],
+        ["5", "Frijoles Rojos 1lb", "FJ1", "Granos", 34, 10, 0.80, 1.50, "https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=160&h=160&fit=crop&auto=format"],
+        ["6", "Pan Dulce Unidad", "PD1", "Snacks", 12, 20, 0.25, 0.50, "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=160&h=160&fit=crop&auto=format"],
+        ["7", "Pepsi 2L", "PP2L", "Bebidas", 30, 10, 1.10, 1.90, "https://images.unsplash.com/photo-1629203851122-3726555cf519?w=160&h=160&fit=crop&auto=format"],
+        ["8", "Queso Duro 200g", "QD1", "Lácteos", 7, 8, 3.20, 5.00, "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=160&h=160&fit=crop&auto=format"],
+        ["9", "Azúcar Blanca 5lb", "AZ5", "Granos", 55, 10, 1.50, 2.50, "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=160&h=160&fit=crop&auto=format"],
+        ["10", "Papel Higiénico x4", "PH4", "Limpieza", 18, 15, 2.50, 4.25, "https://images.unsplash.com/photo-1584556812952-905ffd0c611a?w=160&h=160&fit=crop&auto=format"],
+        ["11", "Cereal Zucaritas", "CZ1", "Snacks", 14, 5, 2.90, 4.75, "https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=160&h=160&fit=crop&auto=format"],
+        ["12", "Agua Cristal 1.5L", "AC15", "Bebidas", 60, 20, 0.45, 0.85, "https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=160&h=160&fit=crop&auto=format"]
+      ];
+      for (const p of mockProducts) {
+        await client.query(`
+          INSERT INTO productos (id, name, sku, category, stock, min_stock, cost, price, img)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT (sku) DO NOTHING
+        `, p);
+      }
+
+      // Clientes
+      const mockCustomers = [
+        ["1", "María López Díaz", "natural", "0614-010180-101-3", "12345-6", "01234567-8", "7888-1234", "maria@empresa.com.sv", 4580.00, "20/06/2025"],
+        ["2", "Distribuidora San Miguel S.A.", "juridica", "0614-150590-102-1", "98765-4", null, "2222-3344", "compras@distsanmiguel.com.sv", 18420.50, "21/06/2025"],
+        ["3", "Carlos Mendez Ramos", "natural", null, null, "02345678-9", "7755-9988", "carlos.m@gmail.com", 890.75, "18/06/2025"]
+      ];
+      for (const c of mockCustomers) {
+        await client.query(`
+          INSERT INTO clientes (id, name, type, nit, nrc, dui, phone, email, total, last_buy)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ON CONFLICT (id) DO NOTHING
+        `, c);
+      }
+
+      // Proveedores
+      const mockSuppliers = [
+        ["1", "Distribuidora Central", "2222-4455", "11223-4", "contacto@distcentral.com.sv", "20/06/2025"],
+        ["2", "Proveedor Lácteos SV", "7788-9900", "55667-8", "ventas@lacteos.com.sv", "18/06/2025"],
+        ["3", "Bebidas del Norte", "2233-1122", "99001-2", "pedidos@bebidasnorte.com.sv", "15/06/2025"]
+      ];
+      for (const s of mockSuppliers) {
+        await client.query(`
+          INSERT INTO proveedores (id, name, phone, nrc, email, last_buy)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (id) DO NOTHING
+        `, s);
+      }
+
+      // Compras
+      const mockPurchases = [
+        ["OC-001", "1", "Distribuidora Central", 8, 450.80, "Recibida", JSON.stringify([{ product_id: "1", product_name: "Coca-Cola 2L", price: 1.20, qty: 375 }])],
+        ["OC-002", "2", "Proveedor Lácteos SV", 4, 180.00, "Pendiente", JSON.stringify([{ product_id: "3", product_name: "Leche Entera 1L", price: 0.90, qty: 200 }])],
+        ["OC-003", "3", "Bebidas del Norte", 12, 890.50, "Recibida", JSON.stringify([{ product_id: "7", product_name: "Pepsi 2L", price: 1.10, qty: 810 }])]
+      ];
+      for (const cp of mockPurchases) {
+        await client.query(`
+          INSERT INTO compras (id, supplier_id, supplier_name, items_count, total, status, items_json)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (id) DO NOTHING
+        `, cp);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      success: true,
+      user: {
+        id: adminId,
+        name: adminName,
+        email: adminEmail,
+        role: 'Administrador',
+        status: 'Activo'
+      }
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error al registrar negocio y admin inicial:', err);
+    res.status(500).json({ error: 'Error interno en el servidor al registrar el negocio.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Sembrar datos demo individualmente
+app.post('/api/setup/seed', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Productos
+    const mockProducts = [
+      ["1", "Coca-Cola 2L", "CC2L", "Bebidas", 45, 10, 1.20, 2.00, "https://images.unsplash.com/photo-1554866585-cd94860890b7?w=160&h=160&fit=crop&auto=format"],
+      ["2", "Arroz Calrose 5lb", "AR5", "Granos", 8, 15, 2.80, 4.50, "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=160&h=160&fit=crop&auto=format"],
+      ["3", "Leche Entera 1L", "LE1", "Lácteos", 0, 20, 0.90, 1.50, "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=160&h=160&fit=crop&auto=format"],
+      ["4", "Jabón Líquido 1L", "JL1", "Limpieza", 23, 5, 1.80, 3.00, "https://images.unsplash.com/photo-1584305574647-0cc949a2bb9f?w=160&h=160&fit=crop&auto=format"],
+      ["5", "Frijoles Rojos 1lb", "FJ1", "Granos", 34, 10, 0.80, 1.50, "https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=160&h=160&fit=crop&auto=format"],
+      ["6", "Pan Dulce Unidad", "PD1", "Snacks", 12, 20, 0.25, 0.50, "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=160&h=160&fit=crop&auto=format"],
+      ["7", "Pepsi 2L", "PP2L", "Bebidas", 30, 10, 1.10, 1.90, "https://images.unsplash.com/photo-1629203851122-3726555cf519?w=160&h=160&fit=crop&auto=format"],
+      ["8", "Queso Duro 200g", "QD1", "Lácteos", 7, 8, 3.20, 5.00, "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=160&h=160&fit=crop&auto=format"],
+      ["9", "Azúcar Blanca 5lb", "AZ5", "Granos", 55, 10, 1.50, 2.50, "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=160&h=160&fit=crop&auto=format"],
+      ["10", "Papel Higiénico x4", "PH4", "Limpieza", 18, 15, 2.50, 4.25, "https://images.unsplash.com/photo-1584556812952-905ffd0c611a?w=160&h=160&fit=crop&auto=format"],
+      ["11", "Cereal Zucaritas", "CZ1", "Snacks", 14, 5, 2.90, 4.75, "https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=160&h=160&fit=crop&auto=format"],
+      ["12", "Agua Cristal 1.5L", "AC15", "Bebidas", 60, 20, 0.45, 0.85, "https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=160&h=160&fit=crop&auto=format"]
+    ];
+    for (const p of mockProducts) {
+      await client.query(`
+        INSERT INTO productos (id, name, sku, category, stock, min_stock, cost, price, img)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (sku) DO NOTHING
+      `, p);
+    }
+
+    // Clientes
+    const mockCustomers = [
+      ["1", "María López Díaz", "natural", "0614-010180-101-3", "12345-6", "01234567-8", "7888-1234", "maria@empresa.com.sv", 4580.00, "20/06/2025"],
+      ["2", "Distribuidora San Miguel S.A.", "juridica", "0614-150590-102-1", "98765-4", null, "2222-3344", "compras@distsanmiguel.com.sv", 18420.50, "21/06/2025"],
+      ["3", "Carlos Mendez Ramos", "natural", null, null, "02345678-9", "7755-9988", "carlos.m@gmail.com", 890.75, "18/06/2025"]
+    ];
+    for (const c of mockCustomers) {
+      await client.query(`
+        INSERT INTO clientes (id, name, type, nit, nrc, dui, phone, email, total, last_buy)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (id) DO NOTHING
+      `, c);
+    }
+
+    // Proveedores
+    const mockSuppliers = [
+      ["1", "Distribuidora Central", "2222-4455", "11223-4", "contacto@distcentral.com.sv", "20/06/2025"],
+      ["2", "Proveedor Lácteos SV", "7788-9900", "55667-8", "ventas@lacteos.com.sv", "18/06/2025"],
+      ["3", "Bebidas del Norte", "2233-1122", "99001-2", "pedidos@bebidasnorte.com.sv", "15/06/2025"]
+    ];
+    for (const s of mockSuppliers) {
+      await client.query(`
+        INSERT INTO proveedores (id, name, phone, nrc, email, last_buy)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (id) DO NOTHING
+      `, s);
+    }
+
+    // Compras
+    const mockPurchases = [
+      ["OC-001", "1", "Distribuidora Central", 8, 450.80, "Recibida", JSON.stringify([{ product_id: "1", product_name: "Coca-Cola 2L", price: 1.20, qty: 375 }])],
+      ["OC-002", "2", "Proveedor Lácteos SV", 4, 180.00, "Pendiente", JSON.stringify([{ product_id: "3", product_name: "Leche Entera 1L", price: 0.90, qty: 200 }])],
+      ["OC-003", "3", "Bebidas del Norte", 12, 890.50, "Recibida", JSON.stringify([{ product_id: "7", product_name: "Pepsi 2L", price: 1.10, qty: 810 }])]
+    ];
+    for (const cp of mockPurchases) {
+      await client.query(`
+        INSERT INTO compras (id, supplier_id, supplier_name, items_count, total, status, items_json)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (id) DO NOTHING
+      `, cp);
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Datos demo sembrados con éxito.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error al sembrar datos demo:', err);
+    res.status(500).json({ error: 'Error al sembrar datos demo.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Restablecer/limpiar la base de datos completa
+app.post('/api/setup/reset', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Truncar todas las tablas
+    await client.query('TRUNCATE TABLE ventas, compras, productos, clientes, proveedores, configuracion, usuarios CASCADE');
+    
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Base de datos restablecida completamente' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error al restablecer la base de datos:', err);
+    res.status(500).json({ error: 'Error al restablecer la base de datos.' });
+  } finally {
+    client.release();
   }
 });
 

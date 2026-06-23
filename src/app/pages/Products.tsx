@@ -6,7 +6,7 @@ import { usePOSStore, Product } from "../store/usePOSStore";
 import { Btn, Input, Badge, $, status, CATS } from "../components/Primitives";
 
 export default function Products() {
-  const { products, fetchProducts, createProduct, updateProduct, deleteProduct } = usePOSStore();
+  const { products, fetchProducts, createProduct, updateProduct, deleteProduct, suppliers, fetchSuppliers } = usePOSStore();
   const [view, setView] = useState<"list" | "grid">("list");
   const [drawer, setDrawer] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -25,6 +25,7 @@ export default function Products() {
 
   useEffect(() => {
     fetchProducts();
+    fetchSuppliers();
   }, []);
 
   function handleEditClick(p: Product) {
@@ -196,7 +197,7 @@ export default function Products() {
                 { title: "Clasificación", content: (
                   <div className="grid grid-cols-2 gap-3">
                     <div><label className="text-sm font-semibold text-[#0F172A] block mb-1">Categoría</label><select value={form.cat} onChange={e => setForm(f => ({ ...f, cat: e.target.value }))} className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]">{CATS.filter(c => c !== "Todos").map(c => <option key={c}>{c}</option>)}</select></div>
-                    <div><label className="text-sm font-semibold text-[#0F172A] block mb-1">Proveedor</label><select className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]"><option>Seleccionar…</option><option>Distribuidora Central</option><option>Proveedor Lácteos SV</option></select></div>
+                    <div><label className="text-sm font-semibold text-[#0F172A] block mb-1">Proveedor</label><select className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]"><option>Seleccionar…</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
                   </div>
                 )},
               ].map(sec => (

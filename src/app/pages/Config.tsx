@@ -28,7 +28,9 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
     fetchUsers,
     createUser,
     updateUser,
-    deleteUser
+    deleteUser,
+    resetDatabase,
+    seedDatabase
   } = usePOSStore();
 
   const [sec, setSec] = useState("dte");
@@ -140,6 +142,7 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
     { id: "usuarios",   label: "Usuarios y Roles",   icon: Users       },
     { id: "plan",       label: "Plan y Cobros",      icon: Receipt     },
     { id: "impresoras", label: "Impresoras",         icon: Printer     },
+    { id: "sistema",    label: "Sistema y BD",       icon: RefreshCw   },
   ];
 
   return (
@@ -309,6 +312,57 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
                 <p className="text-sm font-semibold text-[#64748B]">No hay impresoras configuradas</p>
                 <p className="text-xs text-[#94A3B8] mt-1 mb-4">Conecta una impresora térmica para imprimir tickets de venta</p>
                 <Btn v="secondary" sz="sm"><Plus size={13} />Agregar impresora</Btn>
+              </div>
+            </div>
+          )}
+
+          {sec === "sistema" && (
+            <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-6">
+              <div>
+                <h2 className="font-black text-[#0F172A]">Sistema y Base de Datos</h2>
+                <p className="text-xs text-[#94A3B8] mt-0.5">Administración y mantenimiento de la base de datos de Neon PostgreSQL</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="border border-[#E2E8F0] rounded-2xl p-5 space-y-3 bg-[#F8FAFC]">
+                  <h3 className="text-sm font-bold text-[#0F172A]">Cargar catálogo de demostración</h3>
+                  <p className="text-xs text-[#64748B]">Precarga productos, proveedores y clientes modelo en la base de datos para realizar pruebas de ventas e inventario rápidamente. Solo se sembrarán si no existen registros.</p>
+                  <Btn v="secondary" sz="sm" onClick={async () => {
+                    if (confirm("¿Deseas cargar el catálogo demo de prueba?")) {
+                      const ok = await seedDatabase();
+                      if (ok) {
+                        alert("Datos demo cargados con éxito.");
+                      } else {
+                        alert("Ocurrió un error o la base de datos ya contiene registros.");
+                      }
+                    }
+                  }}>
+                    <RefreshCw size={13} /> Cargar datos demo
+                  </Btn>
+                </div>
+
+                <div className="border border-red-200 rounded-2xl p-5 space-y-3 bg-red-50/30">
+                  <h3 className="text-sm font-bold text-red-700">Zona de Peligro: Restablecer base de datos</h3>
+                  <p className="text-xs text-red-600">Elimina por completo todos los datos almacenados en Neon PostgreSQL: productos, inventarios, compras, ventas, clientes, configuración de empresa y todos los usuarios registrados. Esta acción no se puede deshacer.</p>
+                  
+                  <Btn v="danger" sz="sm" onClick={async () => {
+                    const confirm1 = confirm("¿Estás ABSOLUTAMENTE seguro de que deseas borrar toda la base de datos? Se eliminará toda la información y se cerrará tu sesión.");
+                    if (confirm1) {
+                      const confirm2 = confirm("ESTA ACCIÓN ES IRREVERSIBLE. ¿Confirmas que quieres restablecer el sistema desde cero?");
+                      if (confirm2) {
+                        const ok = await resetDatabase();
+                        if (ok) {
+                          alert("Base de datos restablecida con éxito. Redirigiendo a configuración inicial.");
+                          window.location.reload();
+                        } else {
+                          alert("Error al restablecer la base de datos.");
+                        }
+                      }
+                    }
+                  }}>
+                    Restablecer y Limpiar todo
+                  </Btn>
+                </div>
               </div>
             </div>
           )}

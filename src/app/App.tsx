@@ -276,17 +276,28 @@ function Login({ onLogin }: { onLogin: () => void }) {
 
 // ─── Onboarding Component ─────────────────────────────────────────────────────
 function Onboarding({ onDone }: { onDone: () => void }) {
-  const saveConfig = usePOSStore(state => state.saveConfig);
+  const registerBusinessAndAdmin = usePOSStore(state => state.registerBusinessAndAdmin);
   const [step, setStep] = useState(1);
   const [biz, setBiz] = useState("");
   const [type, setType] = useState("Tienda");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  
+  // Admin account details
+  const [adminName, setAdminName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  
+  // DTE connection details
   const [url, setUrl] = useState("");
   const [key, setKey] = useState("");
   const [testing, setTesting] = useState(false);
   const [ok, setOk] = useState(false);
-  const STEPS = ["Tu negocio", "Conectar DTE", "Productos", "¡Listo!"];
+  
+  // Demo seeding choice
+  const [seedDemo, setSeedDemo] = useState(true);
+
+  const STEPS = ["Negocio", "Administrador", "Conexión DTE", "Inicialización"];
 
   function testConn() {
     setTesting(true);
@@ -294,18 +305,34 @@ function Onboarding({ onDone }: { onDone: () => void }) {
   }
 
   async function handleFinish() {
-    const success = await saveConfig({
+    if (!biz) {
+      alert("Por favor ingresa el nombre de tu negocio.");
+      setStep(1);
+      return;
+    }
+    if (!adminName || !adminEmail || !adminPassword) {
+      alert("Por favor completa todos los campos de tu cuenta de administrador.");
+      setStep(2);
+      return;
+    }
+    
+    const success = await registerBusinessAndAdmin({
       bizName: biz,
       bizType: type,
       bizPhone: phone,
       bizAddress: address,
       dteUrl: url,
-      dteKey: key
+      dteKey: key,
+      adminName,
+      adminEmail,
+      adminPassword,
+      seedDemo
     });
+    
     if (success) {
       onDone();
     } else {
-      alert("Error al guardar la configuración de onboarding.");
+      alert("Error al registrar la empresa. El correo electrónico del administrador podría ya estar en uso.");
     }
   }
 
@@ -317,7 +344,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
             <Zap size={26} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-[#0F172A]">Configura tu VentaPOS</h1>
-          <p className="text-[#64748B] text-sm mt-1">4 pasos rápidos para comenzar a vender</p>
+          <p className="text-[#64748B] text-sm mt-1">Registra tu empresa y tu cuenta de administrador desde cero</p>
         </div>
         {/* Stepper */}
         <div className="flex items-center mb-8 px-2">
@@ -337,6 +364,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
           {step === 1 && (
             <div className="space-y-5">
               <h2 className="text-xl font-bold text-[#0F172A]">Tu negocio</h2>
+              <p className="text-xs text-[#64748B] -mt-3">Ingresa los datos generales de tu establecimiento comercial</p>
               <Input label="Nombre del negocio *" placeholder="Mi Tienda El Sol" value={biz} onChange={setBiz} icon={Building2} />
               <div>
                 <label className="text-sm font-semibold text-[#0F172A] block mb-2">Tipo de negocio</label>
@@ -357,56 +385,55 @@ function Onboarding({ onDone }: { onDone: () => void }) {
           )}
           {step === 2 && (
             <div className="space-y-5">
-              <h2 className="text-xl font-bold text-[#0F172A]">Conecta tu sistema DTE</h2>
-              <p className="text-sm text-[#64748B]">Ingresa los datos de tu sistema de facturación electrónica. Puedes omitir y configurar después.</p>
+              <h2 className="text-xl font-bold text-[#0F172A]">Cuenta del Administrador</h2>
+              <p className="text-xs text-[#64748B] -mt-3">Esta cuenta tendrá acceso total para configurar y administrar el sistema</p>
+              <Input label="Nombre completo *" placeholder="Ingresa tu nombre completo" value={adminName} onChange={setAdminName} icon={User} />
+              <Input label="Correo electrónico *" type="email" placeholder="admin@minegocio.com.sv" value={adminEmail} onChange={setAdminEmail} icon={AtSign} />
+              <Input label="Contraseña de acceso *" type="password" placeholder="Mínimo 6 caracteres" value={adminPassword} onChange={setAdminPassword} icon={Lock} />
+            </div>
+          )}
+          {step === 3 && (
+            <div className="space-y-5">
+              <h2 className="text-xl font-bold text-[#0F172A]">Conectividad DTE (Facturación Electrónica)</h2>
+              <p className="text-sm text-[#64748B]">Configura la conexión con tu API DTE externa. Puedes omitir este paso y configurarlo después.</p>
               <Input label="URL del sistema DTE" placeholder="https://api.mi-sistema-dte.com" value={url} onChange={setUrl} icon={Globe} />
               <Input label="API Key" placeholder="sk_live_..." type="password" value={key} onChange={setKey} icon={Lock} />
               <Btn v="secondary" full onClick={testConn} disabled={testing || !url || !key}>
                 {testing ? <><RefreshCw size={13} className="animate-spin" />Probando conexión…</> : <><Activity size={13} />Probar conexión</>}
               </Btn>
-              {ok && <div className="flex items-center gap-2.5 bg-emerald-50 text-emerald-700 p-3.5 rounded-xl text-sm font-semibold ring-1 ring-emerald-200"><CheckCircle size={16} />Conexión exitosa — Mi Tienda S.A. de C.V. | Producción</div>}
-              <button onClick={() => setStep(3)} className="w-full text-center text-sm text-[#94A3B8] hover:text-[#64748B] py-1 transition-colors">Omitir por ahora, configurar más tarde →</button>
-            </div>
-          )}
-          {step === 3 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold text-[#0F172A]">Agrega tu primer producto</h2>
-              <p className="text-sm text-[#64748B]">Elige cómo quieres comenzar tu inventario.</p>
-              {[
-                { icon: Tag,          label: "Agregar manualmente",  desc: "Crea tus productos uno a uno" },
-                { icon: Truck,        label: "Importar desde Excel", desc: "Sube tu catálogo completo" },
-                { icon: ChevronRight, label: "Omitir este paso",     desc: "Agrega productos después" },
-              ].map(o => (
-                <button key={o.label} onClick={() => setStep(4)}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-[#E2E8F0] hover:border-[#1B4FD8] hover:bg-[#EEF2FF]/30 transition-all text-left group">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-[#EEF2FF] flex items-center justify-center text-[#64748B] group-hover:text-[#1B4FD8] transition-colors shrink-0"><o.icon size={18} /></div>
-                  <div className="flex-1"><div className="text-sm font-semibold text-[#0F172A]">{o.label}</div><div className="text-xs text-[#94A3B8]">{o.desc}</div></div>
-                  <ChevronRight size={15} className="text-[#E2E8F0] group-hover:text-[#1B4FD8] transition-colors" />
-                </button>
-              ))}
+              {ok && <div className="flex items-center gap-2.5 bg-emerald-50 text-emerald-700 p-3.5 rounded-xl text-sm font-semibold ring-1 ring-emerald-200"><CheckCircle size={16} />Conexión exitosa — Emisor validado correctamente</div>}
             </div>
           )}
           {step === 4 && (
             <div className="text-center space-y-5">
-              <div className="text-6xl">🎉</div>
-              <h2 className="text-2xl font-bold text-[#0F172A]">Tu sistema está listo</h2>
-              <p className="text-sm text-[#64748B]">Completaste la configuración inicial de VentaPOS.</p>
-              <div className="bg-slate-50 rounded-xl p-4 text-left space-y-3 ring-1 ring-[#E2E8F0]">
-                {[{ ok: !!biz, label: "Negocio configurado" }, { ok: !!url, label: "Sistema DTE conectado" }, { ok: false, label: "Productos en inventario" }].map(i => (
-                  <div key={i.label} className="flex items-center gap-3 text-sm">
-                    {i.ok ? <CheckCircle size={16} className="text-emerald-500 shrink-0" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-200 shrink-0" />}
-                    <span className={i.ok ? "text-[#0F172A] font-semibold" : "text-[#94A3B8]"}>{i.label}</span>
+              <div className="text-6xl">📊</div>
+              <h2 className="text-2xl font-bold text-[#0F172A]">Inicialización de Datos</h2>
+              <p className="text-sm text-[#64748B]">Elige cómo deseas iniciar la base de datos de tu negocio.</p>
+              <div className="bg-slate-50 rounded-2xl p-5 text-left border border-[#E2E8F0] space-y-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" checked={seedDemo} onChange={e => setSeedDemo(e.target.checked)} className="w-5 h-5 accent-[#1B4FD8] rounded mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-sm font-bold text-[#0F172A]">Cargar datos de demostración (Recomendado para pruebas)</span>
+                    <p className="text-xs text-[#64748B] mt-1">Precargará un catálogo inicial de productos de prueba, proveedores y clientes modelo para realizar ventas y pruebas de inmediato.</p>
                   </div>
-                ))}
+                </label>
+                <div className="border-t border-slate-200/60 my-2" />
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" checked={!seedDemo} onChange={e => setSeedDemo(!e.target.checked)} className="w-5 h-5 accent-[#1B4FD8] rounded mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-sm font-bold text-[#0F172A]">Iniciar completamente en blanco (Listo para producción)</span>
+                    <p className="text-xs text-[#64748B] mt-1">La base de datos estará completamente limpia. Tendrás que registrar tus propios productos, inventario, clientes y proveedores desde cero.</p>
+                  </div>
+                </label>
               </div>
-              <Btn v="primary" sz="lg" full onClick={handleFinish}>Ir al Dashboard →</Btn>
+              <Btn v="primary" sz="lg" full onClick={handleFinish}>Finalizar y abrir Dashboard →</Btn>
             </div>
           )}
         </div>
         {step < 4 && (
           <div className="flex justify-between mt-5">
-            <Btn v="ghost" onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step === 1}><ChevronLeft size={14} />Anterior</Btn>
-            <Btn v="primary" onClick={() => setStep(s => s + 1)}>Siguiente<ChevronRight size={14} /></Btn>
+            <Btn v="ghost" onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step === 1}>Anterior</Btn>
+            <Btn v="primary" onClick={() => setStep(s => s + 1)} disabled={(step === 1 && !biz) || (step === 2 && (!adminName || !adminEmail || !adminPassword))}>Siguiente</Btn>
           </div>
         )}
       </div>
@@ -416,7 +443,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
 
 // ─── Main App Component ────────────────────────────────────────────────────────
 export default function App() {
-  const { user, config, fetchConfig } = usePOSStore();
+  const { user, config, fetchConfig, fetchSetupStatus, setupStatus } = usePOSStore();
   const [page, setPage] = useState<Page>("login");
   const [slim, setSlim] = useState(false);
   const [dteConnected, setDteConnected] = useState(true);
@@ -424,15 +451,20 @@ export default function App() {
 
   useEffect(() => {
     async function init() {
-      const hasConfig = await fetchConfig();
-      if (user) {
-        if (hasConfig) {
-          setPage("dashboard");
-        } else {
-          setPage("setup");
-        }
+      const isSetupOk = await fetchSetupStatus();
+      if (!isSetupOk) {
+        setPage("setup");
       } else {
-        setPage("login");
+        const hasConfig = await fetchConfig();
+        if (user) {
+          if (hasConfig) {
+            setPage("dashboard");
+          } else {
+            setPage("setup");
+          }
+        } else {
+          setPage("login");
+        }
       }
       setLoading(false);
     }

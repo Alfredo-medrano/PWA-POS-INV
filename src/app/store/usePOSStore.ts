@@ -168,6 +168,13 @@ interface POSState {
 
   fetchDashboardStats: () => Promise<void>;
   fetchReportsStats: () => Promise<void>;
+  
+  // Acciones de Inicialización/Setup
+  setupStatus: { isConfigured: boolean; hasUsers: boolean } | null;
+  fetchSetupStatus: () => Promise<boolean>;
+  registerBusinessAndAdmin: (data: any) => Promise<boolean>;
+  resetDatabase: () => Promise<boolean>;
+  seedDatabase: () => Promise<boolean>;
 }
 
 export const usePOSStore = create<POSState>((set, get) => ({
@@ -196,6 +203,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
   loadingUsers: false,
   loadingSuppliers: false,
   loadingPurchases: false,
+  setupStatus: null,
 
   fetchProducts: async () => {
     set({ loadingProducts: true });
@@ -617,6 +625,77 @@ export const usePOSStore = create<POSState>((set, get) => ({
     } catch (err) {
       console.error('Error en proceso de venta:', err);
       set({ dteStatus: 'idle' });
+      return false;
+    }
+  },
+
+  fetchSetupStatus: async () => {
+    try {
+      const res = await axios.get('/api/setup/status');
+      set({ setupStatus: res.data });
+      return res.data.isConfigured && res.data.hasUsers;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  registerBusinessAndAdmin: async (data) => {
+    try {
+      const res = await axios.post('/api/setup/register', data);
+      if (res.data && res.data.success) {
+        set({ user: res.data.user });
+        localStorage.setItem('pos_user', JSON.stringify(res.data.user));
+        // Recargar la configuración cargada del negocio
+        await get().fetchConfig();
+        // Forzar recarga del estado de configuración
+        await get().fetchSetupStatus();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  resetDatabase: async () => {
+    try {
+      await axios.post('/api/setup/reset');
+      set({
+        user: null,
+        config: null,
+        products: [],
+        customers: [],
+        cart: [],
+        activeCustomer: null,
+        suppliers: [],
+        purchases: [],
+        dashboardStats: null,
+        reportsStats: null,
+        setupStatus: { isConfigured: false, hasUsers: false }
+      });
+      localStorage.removeItem('pos_user');
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  seedDatabase: async () => {
+    try {
+      await axios.post('/api/setup/seed');
+      await get().fetchProducts();
+      await get().fetchCustomers();
+      await get().fetchSuppliers();
+      await get().fetchPurchases();
+      // Recargar analíticas si aplica
+      await get().fetchDashboardStats();
+      await get().fetchReportsStats();
+      return true;
+    } catch (err) {
+      console.error(err);
       return false;
     }
   }
