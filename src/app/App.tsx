@@ -182,12 +182,18 @@ function Layout({ page, onNav, children, dte, slim, onSlim }: {
 // ─── Login Component ──────────────────────────────────────────────────────────
 function Login({ onLogin }: { onLogin: () => void }) {
   const login = usePOSStore(state => state.login);
+  const register = usePOSStore(state => state.register);
+  const forgotPassword = usePOSStore(state => state.forgotPassword);
+
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [show, setShow] = useState(false);
   const [rem, setRem] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
 
   async function handleLogin() {
     setLoading(true);
@@ -195,9 +201,45 @@ function Login({ onLogin }: { onLogin: () => void }) {
     const ok = await login(email, pw);
     setLoading(false);
     if (ok) {
+      toast.success("¡Sesión iniciada con éxito!");
       onLogin();
     } else {
       setError("Correo o contraseña incorrectos, o cuenta inactiva.");
+    }
+  }
+
+  async function handleRegister() {
+    if (!name || !email || !pw) {
+      toast.error("Por favor completa todos los campos requeridos.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const ok = await register(name, email, pw);
+    setLoading(false);
+    if (ok) {
+      toast.success("¡Registro completado e inicio de sesión exitoso!");
+      onLogin();
+    } else {
+      setError("Error al registrarte. El correo ya podría estar en uso.");
+    }
+  }
+
+  async function handleForgot() {
+    if (!email) {
+      toast.error("Por favor ingresa tu correo electrónico.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setTempPassword(null);
+    const temp = await forgotPassword(email);
+    setLoading(false);
+    if (temp) {
+      setTempPassword(temp);
+      toast.success("Contraseña restablecida con éxito.");
+    } else {
+      setError("No se encontró ningún usuario con ese correo electrónico.");
     }
   }
 
@@ -235,42 +277,124 @@ function Login({ onLogin }: { onLogin: () => void }) {
             <div className="w-9 h-9 rounded-xl bg-[#1B4FD8] flex items-center justify-center shadow-sm"><Zap size={18} className="text-white" /></div>
             <span className="font-bold text-[#0F172A] text-xl">VentaPOS</span>
           </div>
-          <h2 className="text-3xl font-bold text-[#0F172A] mb-1 tracking-tight">Bienvenido</h2>
-          <p className="text-[#64748B] text-sm mb-8">Ingresa a tu cuenta para continuar</p>
-          <div className="space-y-4">
-            <Input label="Correo electrónico" type="email" placeholder="correo@empresa.com" value={email} onChange={setEmail} icon={AtSign} />
-            <div>
-              <label className="text-sm font-semibold text-[#0F172A] block mb-1">Contraseña</label>
-              <div className="relative">
-                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
-                <input type={show ? "text" : "password"} value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••"
-                  className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/30 focus:border-[#1B4FD8] transition-all" />
-                <button onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]">
-                  {show ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </div>
-            
-            {error && (
-              <div className="bg-red-50 text-red-700 text-xs font-semibold p-3.5 rounded-xl border border-red-200">
-                {error}
-              </div>
-            )}
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-[#64748B] font-medium">
-                <input type="checkbox" checked={rem} onChange={e => setRem(e.target.checked)} className="w-4 h-4 accent-[#1B4FD8] rounded" />
-                Recordarme
-              </label>
-              <button className="text-sm text-[#1B4FD8] font-semibold hover:underline">¿Olvidaste tu contraseña?</button>
-            </div>
-            <Btn v="primary" sz="lg" full onClick={handleLogin} disabled={loading}>
-              {loading ? <><RefreshCw size={14} className="animate-spin" /> Ingresando…</> : "Ingresar"}
-            </Btn>
-          </div>
-          <div className="mt-8 pt-8 border-t border-[#F1F5F9] text-center">
-            <p className="text-sm text-[#64748B]">¿Sin cuenta? <button className="text-[#1B4FD8] font-bold hover:underline">Prueba 30 días gratis</button></p>
-          </div>
+          {mode === "login" && (
+            <>
+              <h2 className="text-3xl font-bold text-[#0F172A] mb-1 tracking-tight">Bienvenido</h2>
+              <p className="text-[#64748B] text-sm mb-8">Ingresa a tu cuenta para continuar</p>
+              <div className="space-y-4">
+                <Input label="Correo electrónico" type="email" placeholder="correo@empresa.com" value={email} onChange={setEmail} icon={AtSign} />
+                <div>
+                  <label className="text-sm font-semibold text-[#0F172A] block mb-1">Contraseña</label>
+                  <div className="relative">
+                    <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+                    <input type={show ? "text" : "password"} value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••"
+                      className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/30 focus:border-[#1B4FD8] transition-all" />
+                    <button onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]">
+                      {show ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+                
+                {error && (
+                  <div className="bg-red-50 text-red-700 text-xs font-semibold p-3.5 rounded-xl border border-red-200">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer text-sm text-[#64748B] font-medium">
+                    <input type="checkbox" checked={rem} onChange={e => setRem(e.target.checked)} className="w-4 h-4 accent-[#1B4FD8] rounded" />
+                    Recordarme
+                  </label>
+                  <button onClick={() => { setMode("forgot"); setError(null); }} className="text-sm text-[#1B4FD8] font-semibold hover:underline">¿Olvidaste tu contraseña?</button>
+                </div>
+                <Btn v="primary" sz="lg" full onClick={handleLogin} disabled={loading}>
+                  {loading ? <><RefreshCw size={14} className="animate-spin" /> Ingresando…</> : "Ingresar"}
+                </Btn>
+              </div>
+              <div className="mt-8 pt-8 border-t border-[#F1F5F9] text-center">
+                <p className="text-sm text-[#64748B]">¿Sin cuenta? <button onClick={() => { setMode("register"); setError(null); }} className="text-[#1B4FD8] font-bold hover:underline">Regístrate aquí</button></p>
+              </div>
+            </>
+          )}
+
+          {mode === "register" && (
+            <>
+              <h2 className="text-3xl font-bold text-[#0F172A] mb-1 tracking-tight">Crea tu cuenta</h2>
+              <p className="text-[#64748B] text-sm mb-8">Regístrate como usuario para comenzar a vender</p>
+              <div className="space-y-4">
+                <Input label="Nombre completo" type="text" placeholder="ej. Juan Pérez" value={name} onChange={setName} icon={User} />
+                <Input label="Correo electrónico" type="email" placeholder="correo@empresa.com" value={email} onChange={setEmail} icon={AtSign} />
+                <div>
+                  <label className="text-sm font-semibold text-[#0F172A] block mb-1">Contraseña</label>
+                  <div className="relative">
+                    <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+                    <input type={show ? "text" : "password"} value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••"
+                      className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/30 focus:border-[#1B4FD8] transition-all" />
+                    <button onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]">
+                      {show ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="bg-red-50 text-red-700 text-xs font-semibold p-3.5 rounded-xl border border-red-200">
+                    {error}
+                  </div>
+                )}
+
+                <Btn v="primary" sz="lg" full onClick={handleRegister} disabled={loading}>
+                  {loading ? <><RefreshCw size={14} className="animate-spin" /> Registrando…</> : "Registrarse"}
+                </Btn>
+              </div>
+              <div className="mt-8 pt-8 border-t border-[#F1F5F9] text-center">
+                <p className="text-sm text-[#64748B]">¿Ya tienes cuenta? <button onClick={() => { setMode("login"); setError(null); }} className="text-[#1B4FD8] font-bold hover:underline">Inicia sesión</button></p>
+              </div>
+            </>
+          )}
+
+          {mode === "forgot" && (
+            <>
+              <h2 className="text-3xl font-bold text-[#0F172A] mb-1 tracking-tight">Recuperación</h2>
+              <p className="text-[#64748B] text-sm mb-8">Ingresa tu correo para generar una contraseña temporal</p>
+              
+              {tempPassword ? (
+                <div className="space-y-5">
+                  <div className="bg-emerald-50 text-emerald-800 p-4 rounded-2xl border border-emerald-200 text-sm space-y-2">
+                    <p className="font-bold">¡Contraseña restablecida con éxito!</p>
+                    <p>Usa la siguiente contraseña temporal para iniciar sesión:</p>
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-300 font-mono text-center text-lg font-black tracking-wider text-emerald-950 selection:bg-emerald-200 select-all">
+                      {tempPassword}
+                    </div>
+                    <p className="text-xs text-emerald-600 font-medium">Cópiala y cámbiala inmediatamente en la configuración del perfil una vez accedas.</p>
+                  </div>
+                  <Btn v="primary" sz="lg" full onClick={() => { setMode("login"); setTempPassword(null); setEmail(""); setPw(""); }}>
+                    Ir a Iniciar Sesión
+                  </Btn>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Input label="Correo electrónico" type="email" placeholder="correo@empresa.com" value={email} onChange={setEmail} icon={AtSign} />
+
+                  {error && (
+                    <div className="bg-red-50 text-red-700 text-xs font-semibold p-3.5 rounded-xl border border-red-200">
+                      {error}
+                    </div>
+                  )}
+
+                  <Btn v="primary" sz="lg" full onClick={handleForgot} disabled={loading}>
+                    {loading ? <><RefreshCw size={14} className="animate-spin" /> Procesando…</> : "Restablecer Contraseña"}
+                  </Btn>
+                  
+                  <div className="text-center pt-2">
+                    <button onClick={() => { setMode("login"); setError(null); }} className="text-sm text-[#1B4FD8] font-bold hover:underline">Volver al inicio de sesión</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
         </div>
       </div>
     </div>

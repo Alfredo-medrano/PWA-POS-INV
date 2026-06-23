@@ -174,6 +174,8 @@ interface POSState {
   saveConfig: (cfg: BusinessConfig) => Promise<boolean>;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  register: (name: string, email: string, password: string) => Promise<boolean>;
+  forgotPassword: (email: string) => Promise<string | null>;
   
   fetchUsers: () => Promise<void>;
   createUser: (usr: Omit<User, 'id'> & { password?: string }) => Promise<boolean>;
@@ -431,6 +433,34 @@ export const usePOSStore = create<POSState>()(
   logout: () => {
     set({ user: null });
     localStorage.removeItem('pos_user');
+  },
+
+  register: async (name, email, password) => {
+    try {
+      const res = await axios.post('/api/auth/register', { name, email, password });
+      if (res.data && res.data.success) {
+        set({ user: res.data.user });
+        localStorage.setItem('pos_user', JSON.stringify(res.data.user));
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  forgotPassword: async (email) => {
+    try {
+      const res = await axios.post('/api/auth/forgot-password', { email });
+      if (res.data && res.data.success) {
+        return res.data.tempPassword;
+      }
+      return null;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
   },
 
   // Usuarios CRUD
