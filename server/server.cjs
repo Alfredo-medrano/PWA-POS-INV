@@ -66,9 +66,20 @@ async function initDatabase() {
         pay_method VARCHAR(50) NOT NULL,
         dte_status VARCHAR(50) NOT NULL,
         dte_type VARCHAR(50) NOT NULL,
+        customer_id VARCHAR(36),
+        customer_name VARCHAR(255),
         raw_dte_json JSONB,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Migración: agregar columnas si no existen (para DBs existentes)
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TABLE ventas ADD COLUMN IF NOT EXISTS customer_id VARCHAR(36);
+        ALTER TABLE ventas ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255);
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
     `);
 
     // 4. Tabla de Configuracion (Ajustes de negocio y DTE)
@@ -81,8 +92,17 @@ async function initDatabase() {
         biz_address TEXT,
         dte_url TEXT,
         dte_key TEXT,
+        apertura_caja DECIMAL(12,2) NOT NULL DEFAULT 200.00,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Migración: agregar apertura_caja si no existe
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TABLE configuracion ADD COLUMN IF NOT EXISTS apertura_caja DECIMAL(12,2) NOT NULL DEFAULT 200.00;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
     `);
 
     // 5. Tabla de Usuarios (Cajeros y Administradores)
@@ -324,9 +344,9 @@ app.post('/api/ventas', async (req, res) => {
     // 1. Crear el registro de venta
     const saleId = crypto.randomUUID();
     await client.query(`
-      INSERT INTO ventas (id, total, pay_method, dte_status, dte_type, raw_dte_json)
-      VALUES ($1, $2, $3, $4, $5, $6)
-    `, [saleId, parseFloat(total) || 0.00, payMethod, dteStatus, dteType, JSON.stringify(rawDteJson || {})]);
+      INSERT INTO ventas (id, total, pay_method, dte_status, dte_type, customer_id, customer_name, raw_dte_json)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [saleId, parseFloat(total) || 0.00, payMethod, dteStatus, dteType, customer?.id || null, customer?.name || null, JSON.stringify(rawDteJson || {})]);
 
     // 2. Decrementar el stock de los productos
     for (const item of cart) {
@@ -413,7 +433,8 @@ app.get('/api/configuracion', async (req, res) => {
       bizPhone: r.biz_phone,
       bizAddress: r.biz_address,
       dteUrl: r.dte_url,
-      dteKey: r.dte_key
+      dteKey: r.dte_key,
+      aperturaCaja: parseFloat(r.apertura_caja) || 200.00
     });
   } catch (err) {
     console.error(err);
@@ -422,23 +443,23 @@ app.get('/api/configuracion', async (req, res) => {
 });
 
 app.post('/api/configuracion', async (req, res) => {
-  const { bizName, bizType, bizPhone, bizAddress, dteUrl, dteKey } = req.body;
+  const { bizName, bizType, bizPhone, bizAddress, dteUrl, dteKey, aperturaCaja } = req.body;
   try {
     const check = await pool.query('SELECT id FROM configuracion LIMIT 1');
     if (check.rowCount > 0) {
       const id = check.rows[0].id;
       await pool.query(`
         UPDATE configuracion
-        SET biz_name = $1, biz_type = $2, biz_phone = $3, biz_address = $4, dte_url = $5, dte_key = $6, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $7
-      `, [bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null, id]);
+        SET biz_name = $1, biz_type = $2, biz_phone = $3, biz_address = $4, dte_url = $5, dte_key = $6, apertura_caja = $7, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $8
+      `, [bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null, parseFloat(aperturaCaja) || 200.00, id]);
       res.json({ success: true, message: 'Configuración actualizada' });
     } else {
       const id = 'single';
       await pool.query(`
-        INSERT INTO configuracion (id, biz_name, biz_type, biz_phone, biz_address, dte_url, dte_key)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [id, bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null]);
+        INSERT INTO configuracion (id, biz_name, biz_type, biz_phone, biz_address, dte_url, dte_key, apertura_caja)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [id, bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null, parseFloat(aperturaCaja) || 200.00]);
       res.status(201).json({ success: true, message: 'Configuración creada' });
     }
   } catch (err) {
@@ -876,13 +897,19 @@ app.get('/api/reportes/corte-caja', async (req, res) => {
     const startOfToday = new Date();
     startOfToday.setHours(0,0,0,0);
 
+    // Leer apertura de caja desde configuración
+    const configRes = await pool.query('SELECT apertura_caja FROM configuracion LIMIT 1');
+    let apertura = 200.00;
+    if (configRes.rowCount > 0 && configRes.rows[0].apertura_caja) {
+      apertura = parseFloat(configRes.rows[0].apertura_caja);
+    }
+
     const result = await pool.query(`
       SELECT total, pay_method 
       FROM ventas 
       WHERE created_at >= $1
     `, [startOfToday]);
 
-    let apertura = 200.00;
     let cash = 0.00;
     let card = 0.00;
     let transfer = 0.00;
@@ -908,6 +935,44 @@ app.get('/api/reportes/corte-caja', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener corte de caja' });
+  }
+});
+
+// ========================================
+// ENDPOINT: HISTORIAL DE VENTAS
+// ========================================
+app.get('/api/ventas', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    const result = await pool.query(`
+      SELECT id, total, pay_method, dte_status, dte_type, customer_id, customer_name, raw_dte_json, created_at
+      FROM ventas
+      ORDER BY created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    const countRes = await pool.query('SELECT COUNT(*) FROM ventas');
+    const totalCount = parseInt(countRes.rows[0].count);
+
+    const sales = result.rows.map(r => ({
+      id: r.id,
+      total: parseFloat(r.total),
+      payMethod: r.pay_method,
+      dteStatus: r.dte_status,
+      dteType: r.dte_type,
+      customerId: r.customer_id,
+      customerName: r.customer_name || 'Consumidor Final',
+      items: r.raw_dte_json?.detalles || [],
+      date: new Date(r.created_at).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      time: new Date(r.created_at).toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      createdAt: r.created_at
+    }));
+
+    res.json({ sales, total: totalCount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener historial de ventas' });
   }
 });
 

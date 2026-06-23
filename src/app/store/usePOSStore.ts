@@ -67,6 +67,21 @@ export interface BusinessConfig {
   bizAddress?: string;
   dteUrl?: string;
   dteKey?: string;
+  aperturaCaja?: number;
+}
+
+export interface Sale {
+  id: string;
+  total: number;
+  payMethod: string;
+  dteStatus: string;
+  dteType: string;
+  customerId?: string;
+  customerName: string;
+  items: any[];
+  date: string;
+  time: string;
+  createdAt: string;
 }
 
 export interface DashboardStats {
@@ -120,6 +135,11 @@ interface POSState {
   loadingSuppliers: boolean;
   loadingPurchases: boolean;
 
+  // Historial de ventas
+  sales: Sale[];
+  salesTotalCount: number;
+  loadingSales: boolean;
+
   // Acciones
   fetchProducts: () => Promise<void>;
   fetchCustomers: () => Promise<void>;
@@ -168,6 +188,7 @@ interface POSState {
 
   fetchDashboardStats: () => Promise<void>;
   fetchReportsStats: () => Promise<void>;
+  fetchSales: () => Promise<void>;
   
   // Acciones de Inicialización/Setup
   setupStatus: { isConfigured: boolean; hasUsers: boolean } | null;
@@ -204,6 +225,9 @@ export const usePOSStore = create<POSState>((set, get) => ({
   loadingSuppliers: false,
   loadingPurchases: false,
   setupStatus: null,
+  sales: [],
+  salesTotalCount: 0,
+  loadingSales: false,
 
   fetchProducts: async () => {
     set({ loadingProducts: true });
@@ -561,6 +585,17 @@ export const usePOSStore = create<POSState>((set, get) => ({
     } catch (err) {
       console.error(err);
       set({ loadingStats: false });
+    }
+  },
+
+  fetchSales: async () => {
+    set({ loadingSales: true });
+    try {
+      const res = await axios.get('/api/ventas?limit=100');
+      set({ sales: res.data.sales || [], salesTotalCount: res.data.total || 0, loadingSales: false });
+    } catch (err) {
+      console.error(err);
+      set({ loadingSales: false });
     }
   },
 

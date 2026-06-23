@@ -52,8 +52,8 @@ export default function Inventory({ onNav }: { onNav: (p: any) => void }) {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Btn v="success" sz="sm" onClick={() => onNav("compras")}><Plus size={13} />Entrada de stock</Btn>
-          <Btn v="secondary" sz="sm"><Edit size={13} />Ajuste manual</Btn>
-          <Btn v="secondary" sz="sm"><Download size={13} />Excel</Btn>
+          <Btn v="secondary" sz="sm" disabled onClick={() => alert("Próximamente: Los ajustes manuales de inventario estarán disponibles en una actualización futura.")}><Edit size={13} />Ajuste manual</Btn>
+          <Btn v="secondary" sz="sm" disabled onClick={() => alert("Próximamente: Exportación a Excel estará disponible en una actualización futura.")}><Download size={13} />Excel</Btn>
         </div>
       </div>
       <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm overflow-hidden">
@@ -103,8 +103,8 @@ export default function Inventory({ onNav }: { onNav: (p: any) => void }) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
-                        <button className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-[#64748B] transition-colors"><Edit size={13} /></button>
-                        <button className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-[#64748B] transition-colors"><BoxIcon size={13} /></button>
+                        <button onClick={() => onNav("productos")} title="Editar producto" className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-[#64748B] transition-colors"><Edit size={13} /></button>
+                        <button onClick={() => onNav("compras")} title="Reabastecer" className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-[#64748B] transition-colors"><BoxIcon size={13} /></button>
                       </div>
                     </td>
                   </tr>

@@ -318,9 +318,9 @@ export default function POS({ dteConnected }: { dteConnected: boolean }) {
               )}
               {/* Actions */}
               <div className="grid grid-cols-3 gap-2">
-                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto"><Printer size={14} />Imprimir</Btn>
-                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto"><MessageSquare size={14} />WhatsApp</Btn>
-                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto"><Mail size={14} />Correo</Btn>
+                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto" onClick={() => alert("Próximamente: La impresión de tickets estará disponible al conectar una impresora térmica.")}><Printer size={14} />Imprimir</Btn>
+                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto" onClick={() => alert("Próximamente: El envío por WhatsApp estará disponible en una actualización futura.")}><MessageSquare size={14} />WhatsApp</Btn>
+                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto" onClick={() => alert("Próximamente: El envío por correo electrónico estará disponible en una actualización futura.")}><Mail size={14} />Correo</Btn>
               </div>
               <Btn v="primary" full onClick={handleReset}>Nueva venta</Btn>
             </div>

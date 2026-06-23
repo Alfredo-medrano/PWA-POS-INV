@@ -49,11 +49,6 @@ export default function Reports() {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Reportes</h1>
-        <div className="flex gap-0.5 bg-slate-100 rounded-xl p-1">
-          {[["hoy","Hoy"],["semana","Semana"],["mes","Este mes"],["custom","Personalizado"]].map(([v,l]) => (
-            <button key={v} onClick={() => setPeriod(v)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${period === v ? "bg-white text-[#0F172A] shadow-sm" : "text-[#94A3B8] hover:text-[#64748B]"}`}>{l}</button>
-          ))}
-        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -85,16 +80,33 @@ export default function Reports() {
             </LineChart>
           </ResponsiveContainer>
           <div className="mt-5 grid grid-cols-3 gap-3">
-            {[
-              { l: "Vendido (6 meses)", v: $(monthlyTotalSum), c: "text-[#0F172A]" }, 
-              { l: "Tendencia", v: "+15%", c: "text-emerald-600" }, 
-              { l: "Muestras de Meses", v: String(monthlyData.length), c: "text-[#0F172A]" }
-            ].map(s => (
-              <div key={s.l} className="bg-slate-50 rounded-xl p-3.5 text-center ring-1 ring-[#E2E8F0]">
-                <p className={`text-xl font-black tabular-nums ${s.c}`}>{s.v}</p>
-                <p className="text-xs text-[#94A3B8] font-medium mt-0.5">{s.l}</p>
-              </div>
-            ))}
+            {(() => {
+              // Calcular tendencia real comparando los últimos 2 meses
+              let trendLabel = "Sin datos";
+              let trendColor = "text-[#94A3B8]";
+              if (monthlyData.length >= 2) {
+                const last = monthlyData[monthlyData.length - 1]?.v || 0;
+                const prev = monthlyData[monthlyData.length - 2]?.v || 0;
+                if (prev > 0) {
+                  const pct = ((last - prev) / prev * 100).toFixed(0);
+                  trendLabel = `${Number(pct) >= 0 ? "+" : ""}${pct}%`;
+                  trendColor = Number(pct) >= 0 ? "text-emerald-600" : "text-red-600";
+                } else if (last > 0) {
+                  trendLabel = "↑ Nuevo";
+                  trendColor = "text-emerald-600";
+                }
+              }
+              return [
+                { l: "Vendido (6 meses)", v: $(monthlyTotalSum), c: "text-[#0F172A]" }, 
+                { l: "Tendencia", v: trendLabel, c: trendColor }, 
+                { l: "Meses registrados", v: String(monthlyData.filter(m => m.v > 0).length), c: "text-[#0F172A]" }
+              ].map(s => (
+                <div key={s.l} className="bg-slate-50 rounded-xl p-3.5 text-center ring-1 ring-[#E2E8F0]">
+                  <p className={`text-xl font-black tabular-nums ${s.c}`}>{s.v}</p>
+                  <p className="text-xs text-[#94A3B8] font-medium mt-0.5">{s.l}</p>
+                </div>
+              ));
+            })()}
           </div>
         </div>
       )}

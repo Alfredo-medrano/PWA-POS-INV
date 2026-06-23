@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   Zap, Users, Receipt, Printer, Globe, Lock, Activity,
-  CheckCircle, Plus, Edit, XCircle, Download, RefreshCw, Wifi, WifiOff, X, Trash2
+  CheckCircle, Plus, Edit, XCircle, Download, RefreshCw, Wifi, WifiOff, X, Trash2,
+  Building2, Phone, MapPin, DollarSign, Save
 } from "lucide-react";
 import { Btn, Input, Badge } from "../components/Primitives";
 import { usePOSStore, User } from "../store/usePOSStore";
@@ -33,7 +34,16 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
     seedDatabase
   } = usePOSStore();
 
-  const [sec, setSec] = useState("dte");
+  const [sec, setSec] = useState("negocio");
+
+  // Business Info state
+  const [bizName, setBizName] = useState("");
+  const [bizType, setBizType] = useState("");
+  const [bizPhone, setBizPhone] = useState("");
+  const [bizAddress, setBizAddress] = useState("");
+  const [aperturaCaja, setAperturaCaja] = useState("200.00");
+  const [savingBiz, setSavingBiz] = useState(false);
+  const [bizSaved, setBizSaved] = useState(false);
 
   // DTE Config state
   const [url, setUrl] = useState("");
@@ -55,20 +65,47 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
   // Sync inputs with config loaded from database
   useEffect(() => {
     if (config) {
+      setBizName(config.bizName || "");
+      setBizType(config.bizType || "");
+      setBizPhone(config.bizPhone || "");
+      setBizAddress(config.bizAddress || "");
+      setAperturaCaja(String(config.aperturaCaja || 200));
       setUrl(config.dteUrl || "");
       setKey(config.dteKey || "");
     }
   }, [config]);
 
-  async function handleSaveConfig() {
+  async function handleSaveBizConfig() {
+    setSavingBiz(true);
+    setBizSaved(false);
+    const ok = await saveConfig({
+      bizName: bizName || "Mi Negocio",
+      bizType: bizType || undefined,
+      bizPhone: bizPhone || undefined,
+      bizAddress: bizAddress || undefined,
+      dteUrl: config?.dteUrl || url,
+      dteKey: config?.dteKey || key,
+      aperturaCaja: parseFloat(aperturaCaja) || 200
+    });
+    setSavingBiz(false);
+    if (ok) {
+      setBizSaved(true);
+      setTimeout(() => setBizSaved(false), 3000);
+    } else {
+      alert("Error al guardar la configuración del negocio.");
+    }
+  }
+
+  async function handleSaveDteConfig() {
     setSavingConfig(true);
     const ok = await saveConfig({
-      bizName: config?.bizName || "Mi Negocio",
-      bizType: config?.bizType || "Tienda",
-      bizPhone: config?.bizPhone || "",
-      bizAddress: config?.bizAddress || "",
+      bizName: config?.bizName || bizName || "Mi Negocio",
+      bizType: config?.bizType || bizType,
+      bizPhone: config?.bizPhone || bizPhone,
+      bizAddress: config?.bizAddress || bizAddress,
       dteUrl: url,
-      dteKey: key
+      dteKey: key,
+      aperturaCaja: config?.aperturaCaja || parseFloat(aperturaCaja) || 200
     });
     setSavingConfig(false);
     if (ok) {
@@ -83,8 +120,12 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
     setTestRes("idle");
     setTimeout(() => {
       setTesting(false);
-      setTestRes("ok");
-      setDteConnected(true);
+      if (url && key) {
+        setTestRes("ok");
+        setDteConnected(true);
+      } else {
+        setTestRes("err");
+      }
     }, 1200);
   }
 
@@ -138,11 +179,11 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
   }
 
   const menu = [
-    { id: "dte",        label: "Integración DTE",    icon: Zap         },
-    { id: "usuarios",   label: "Usuarios y Roles",   icon: Users       },
-    { id: "plan",       label: "Plan y Cobros",      icon: Receipt     },
-    { id: "impresoras", label: "Impresoras",         icon: Printer     },
-    { id: "sistema",    label: "Sistema y BD",       icon: RefreshCw   },
+    { id: "negocio",     label: "Datos del Negocio",  icon: Building2   },
+    { id: "dte",         label: "Integración DTE",    icon: Zap         },
+    { id: "usuarios",    label: "Usuarios y Roles",   icon: Users       },
+    { id: "impresoras",  label: "Impresoras",         icon: Printer     },
+    { id: "sistema",     label: "Sistema y BD",       icon: RefreshCw   },
   ];
 
   return (
@@ -165,6 +206,48 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
 
         {/* Right Column - Subview Content */}
         <div className="flex-1 w-full">
+          {/* ── DATOS DEL NEGOCIO ── */}
+          {sec === "negocio" && (
+            <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-5">
+              <div>
+                <h2 className="font-black text-[#0F172A]">Datos del Negocio</h2>
+                <p className="text-xs text-[#94A3B8] mt-0.5">Información general de tu establecimiento comercial</p>
+              </div>
+              <div className="space-y-4">
+                <Input label="Nombre del negocio *" value={bizName} onChange={setBizName} icon={Building2} placeholder="Mi Tienda El Sol" />
+                <div>
+                  <label className="text-sm font-semibold text-[#0F172A] block mb-2">Tipo de negocio</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {["Tienda", "Ferretería", "Papelería", "Otro"].map(t => (
+                      <button key={t} onClick={() => setBizType(t)}
+                        className={`py-2 rounded-xl border text-xs font-bold transition-all ${bizType === t ? "bg-[#1B4FD8] text-white border-[#1B4FD8] shadow-sm" : "bg-white text-[#64748B] border-[#E2E8F0] hover:border-[#1B4FD8] hover:text-[#1B4FD8]"}`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Teléfono" value={bizPhone} onChange={setBizPhone} icon={Phone} placeholder="2222-3344" />
+                  <Input label="Dirección" value={bizAddress} onChange={setBizAddress} icon={MapPin} placeholder="Calle, colonia, municipio" />
+                </div>
+                <div className="border-t border-[#F1F5F9] pt-4">
+                  <Input label="Monto de apertura de caja ($)" type="number" value={aperturaCaja} onChange={setAperturaCaja} icon={DollarSign} placeholder="200.00" hint="Este monto se usará por defecto al generar el corte de caja diario." />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Btn v="primary" onClick={handleSaveBizConfig} disabled={savingBiz || !bizName}>
+                  {savingBiz ? <><RefreshCw size={13} className="animate-spin" />Guardando...</> : <><Save size={13} />Guardar cambios</>}
+                </Btn>
+                {bizSaved && (
+                  <span className="flex items-center gap-1.5 text-emerald-600 text-xs font-bold animate-in fade-in duration-200">
+                    <CheckCircle size={14} />Guardado exitosamente
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── INTEGRACIÓN DTE ── */}
           {sec === "dte" && (
             <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-5">
               <div>
@@ -204,7 +287,7 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
                 <Btn v="secondary" onClick={testConn} disabled={testing || !url || !key}>
                   {testing ? <><RefreshCw size={13} className="animate-spin" />Probando...</> : <><Activity size={13} />Probar conexión</>}
                 </Btn>
-                <Btn v="primary" onClick={handleSaveConfig} disabled={savingConfig}>
+                <Btn v="primary" onClick={handleSaveDteConfig} disabled={savingConfig}>
                   {savingConfig ? "Guardando..." : "Guardar configuración"}
                 </Btn>
                 {dteConnected && (
@@ -214,9 +297,13 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
               {testRes === "ok" && (
                 <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 p-3.5 rounded-xl text-xs font-semibold ring-1 ring-emerald-200"><CheckCircle size={14} />Conexión exitosa — {config?.bizName || "Mi Negocio"} | Producción</div>
               )}
+              {testRes === "err" && (
+                <div className="flex items-center gap-2 bg-red-50 text-red-700 p-3.5 rounded-xl text-xs font-semibold ring-1 ring-red-200"><XCircle size={14} />Error al conectar. Verifica la URL y API Key.</div>
+              )}
             </div>
           )}
 
+          {/* ── USUARIOS Y ROLES ── */}
           {sec === "usuarios" && (
             <div className="space-y-4">
               <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-5">
@@ -248,6 +335,9 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
                         </td>
                       </tr>
                     ))}
+                    {users.length === 0 && (
+                      <tr><td colSpan={5} className="text-center py-8 text-sm text-[#94A3B8]">No hay usuarios registrados.</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -273,37 +363,7 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
             </div>
           )}
 
-          {sec === "plan" && (
-            <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-5">
-              <h2 className="font-black text-[#0F172A]">Plan y facturación</h2>
-              <div className="bg-gradient-to-br from-[#EEF2FF] to-[#E0E7FF] rounded-2xl p-5 flex items-center justify-between ring-1 ring-[#1B4FD8]/20">
-                <div>
-                  <div className="flex items-center gap-2.5 mb-1">
-                    <p className="font-black text-[#0F172A] text-xl">Plan Estándar</p>
-                    <Badge color="blue">ESTÁNDAR</Badge>
-                  </div>
-                  <p className="text-sm text-[#64748B]">Hasta 3 usuarios · Inventario ilimitado · Reportes básicos</p>
-                </div>
-                <Btn v="primary" sz="sm">Cambiar plan</Btn>
-              </div>
-              <div className="flex items-center justify-between py-3.5 border-b border-[#F1F5F9]">
-                <p className="text-sm text-[#64748B]">Próximo cobro</p>
-                <p className="font-black text-[#0F172A] tabular-nums">$29.99 — 22 julio 2025</p>
-              </div>
-              <div>
-                <h3 className="font-black text-[#0F172A] text-sm mb-3">Historial de pagos</h3>
-                {[{ d: "22 jun 2025", a: "$29.99" }, { d: "22 may 2025", a: "$29.99" }, { d: "22 abr 2025", a: "$29.99" }].map(p => (
-                  <div key={p.d} className="flex items-center gap-4 py-3 border-b border-[#F8FAFC] text-sm">
-                    <span className="flex-1 text-[#64748B]">{p.d}</span>
-                    <span className="font-black tabular-nums">{p.a}</span>
-                    <Badge color="green">Pagado</Badge>
-                    <button className="text-[#1B4FD8] text-xs font-bold hover:underline flex items-center gap-1"><Download size={11} />Recibo</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
+          {/* ── IMPRESORAS ── */}
           {sec === "impresoras" && (
             <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6">
               <h2 className="font-black text-[#0F172A] mb-5">Impresoras</h2>
@@ -316,6 +376,7 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
             </div>
           )}
 
+          {/* ── SISTEMA Y BD ── */}
           {sec === "sistema" && (
             <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-6">
               <div>

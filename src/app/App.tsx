@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  LayoutDashboard, ShoppingCart, Package, Tag, Truck, Users,
+  LayoutDashboard, ShoppingCart, Package, Tag, Truck, Users, User,
   BarChart2, Settings, Menu, X, Search, Bell, ChevronLeft,
   ChevronRight, Check, CheckCircle, Smartphone, Home, LogOut,
   Zap, Clock, Wifi, WifiOff, RefreshCw, Lock, AtSign, Building2, Phone, MapPin, Globe, Activity
@@ -179,8 +179,8 @@ function Layout({ page, onNav, children, dte, slim, onSlim }: {
 // ─── Login Component ──────────────────────────────────────────────────────────
 function Login({ onLogin }: { onLogin: () => void }) {
   const login = usePOSStore(state => state.login);
-  const [email, setEmail] = useState("carlos@mitienda.com.sv");
-  const [pw, setPw] = useState("contraseña123");
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
   const [show, setShow] = useState(false);
   const [rem, setRem] = useState(true);
   const [loading, setLoading] = useState(false);
