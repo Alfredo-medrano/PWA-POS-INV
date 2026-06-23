@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Plus, Truck, Edit, CheckCircle2, ChevronRight, X, Trash2, Banknote } from "lucide-react";
 import { usePOSStore } from "../store/usePOSStore";
 import { Btn, Badge, Input, $ } from "../components/Primitives";
@@ -45,10 +46,11 @@ export default function Purchases() {
     if (!newSup.name) return;
     const ok = await createSupplier(newSup);
     if (ok) {
+      toast.success("Proveedor registrado con éxito.");
       setSupOpen(false);
       setNewSup({ name: "", phone: "", nrc: "", email: "" });
     } else {
-      alert("Error al registrar proveedor.");
+      toast.error("Error al registrar proveedor.");
     }
   }
 
@@ -83,7 +85,7 @@ export default function Purchases() {
 
   async function handleSavePurchase() {
     if (!selectedSupId || purchaseItems.length === 0) {
-      alert("Por favor selecciona un proveedor y agrega al menos un producto.");
+      toast.error("Por favor selecciona un proveedor y agrega al menos un producto.");
       return;
     }
     const supplier = suppliers.find(s => s.id === selectedSupId);
@@ -100,20 +102,23 @@ export default function Purchases() {
     });
 
     if (ok) {
+      toast.success("Orden de compra registrada con éxito.");
       setPurOpen(false);
       setSelectedSupId("");
       setPurchaseItems([]);
       setPurchaseStatus("Pendiente");
     } else {
-      alert("Error al registrar orden de compra.");
+      toast.error("Error al registrar orden de compra.");
     }
   }
 
   async function handleReceivePurchase(id: string) {
     if (confirm("¿Confirmas la recepción de mercadería? El stock de los productos se actualizará automáticamente.")) {
       const ok = await receivePurchase(id);
-      if (!ok) {
-        alert("Ocurrió un error al actualizar la orden de compra.");
+      if (ok) {
+        toast.success("Orden de compra marcada como recibida. Stock actualizado.");
+      } else {
+        toast.error("Ocurrió un error al actualizar la orden de compra.");
       }
     }
   }

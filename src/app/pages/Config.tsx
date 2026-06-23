@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import axios from "axios";
+import { toast } from "sonner";
 import {
   Zap, Users, Receipt, Printer, Globe, Lock, Activity,
   CheckCircle, Plus, Edit, XCircle, Download, RefreshCw, Wifi, WifiOff, X, Trash2,
@@ -90,9 +92,10 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
     setSavingBiz(false);
     if (ok) {
       setBizSaved(true);
+      toast.success("Configuración de negocio guardada con éxito.");
       setTimeout(() => setBizSaved(false), 3000);
     } else {
-      alert("Error al guardar la configuración del negocio.");
+      toast.error("Error al guardar la configuración del negocio.");
     }
   }
 
@@ -109,24 +112,38 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
     });
     setSavingConfig(false);
     if (ok) {
-      alert("Configuración DTE guardada con éxito.");
+      toast.success("Configuración DTE guardada con éxito.");
     } else {
-      alert("Error al guardar la configuración.");
+      toast.error("Error al guardar la configuración.");
     }
   }
 
-  function testConn() {
+  async function testConn() {
+    if (!url) {
+      toast.error("Por favor ingresa la URL de la API DTE.");
+      return;
+    }
     setTesting(true);
     setTestRes("idle");
-    setTimeout(() => {
+    try {
+      const res = await axios.get(`${url}/api/dte/status`);
       setTesting(false);
-      if (url && key) {
+      if (res.status === 200) {
         setTestRes("ok");
         setDteConnected(true);
+        toast.success("Conexión con DTE exitosa — Emisor validado correctamente");
       } else {
         setTestRes("err");
+        setDteConnected(false);
+        toast.error("La API de DTE no respondió con éxito.");
       }
-    }, 1200);
+    } catch (err) {
+      console.error(err);
+      setTesting(false);
+      setTestRes("err");
+      setDteConnected(false);
+      toast.error("Error al conectar con la API de DTE. Verifica la URL.");
+    }
   }
 
   function handleEditUserClick(u: User) {
@@ -143,7 +160,7 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
 
   async function handleSaveUser() {
     if (!userForm.name || !userForm.email || (!editingUser && !userForm.password)) {
-      alert("Por favor completa los campos requeridos.");
+      toast.error("Por favor completa los campos requeridos.");
       return;
     }
 
@@ -161,9 +178,10 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
     }
 
     if (success) {
+      toast.success("Usuario guardado con éxito.");
       setUserModalOpen(false);
     } else {
-      alert("Error al guardar usuario. El correo podría estar en uso.");
+      toast.error("Error al guardar usuario. El correo podría estar en uso.");
     }
   }
 
@@ -171,9 +189,10 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
     if (confirm("¿Estás seguro de que deseas eliminar este usuario?")) {
       const success = await deleteUser(id);
       if (success) {
+        toast.success("Usuario eliminado con éxito.");
         setUserModalOpen(false);
       } else {
-        alert("Error al eliminar usuario.");
+        toast.error("Error al eliminar usuario.");
       }
     }
   }
@@ -392,9 +411,9 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
                     if (confirm("¿Deseas cargar el catálogo demo de prueba?")) {
                       const ok = await seedDatabase();
                       if (ok) {
-                        alert("Datos demo cargados con éxito.");
+                        toast.success("Datos demo cargados con éxito.");
                       } else {
-                        alert("Ocurrió un error o la base de datos ya contiene registros.");
+                        toast.error("Ocurrió un error o la base de datos ya contiene registros.");
                       }
                     }
                   }}>
@@ -413,10 +432,10 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
                       if (confirm2) {
                         const ok = await resetDatabase();
                         if (ok) {
-                          alert("Base de datos restablecida con éxito. Redirigiendo a configuración inicial.");
+                          toast.success("Base de datos restablecida con éxito. Redirigiendo a configuración inicial.");
                           window.location.reload();
                         } else {
-                          alert("Error al restablecer la base de datos.");
+                          toast.error("Error al restablecer la base de datos.");
                         }
                       }
                     }

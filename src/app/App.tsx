@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
+import axios from "axios";
+import { toast } from "sonner";
 import {
   LayoutDashboard, ShoppingCart, Package, Tag, Truck, Users, User,
   BarChart2, Settings, Menu, X, Search, Bell, ChevronLeft,
   ChevronRight, Check, CheckCircle, Smartphone, Home, LogOut,
-  Zap, Clock, Wifi, WifiOff, RefreshCw, Lock, AtSign, Building2, Phone, MapPin, Globe, Activity
+  Zap, Clock, Wifi, WifiOff, RefreshCw, Lock, AtSign, Building2, Phone, MapPin, Globe, Activity,
+  Eye, EyeOff
 } from "lucide-react";
 
 // Importar Vistas Modulares
@@ -243,7 +246,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
                 <input type={show ? "text" : "password"} value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••"
                   className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/30 focus:border-[#1B4FD8] transition-all" />
                 <button onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]">
-                  {show ? <X size={14} /> : <X size={14} />}
+                  {show ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
             </div>
@@ -299,19 +302,39 @@ function Onboarding({ onDone }: { onDone: () => void }) {
 
   const STEPS = ["Negocio", "Administrador", "Conexión DTE", "Inicialización"];
 
-  function testConn() {
+  async function testConn() {
+    if (!url) {
+      toast.error("Por favor ingresa la URL de la API DTE.");
+      return;
+    }
     setTesting(true);
-    setTimeout(() => { setTesting(false); setOk(true); }, 1600);
+    setOk(false);
+    try {
+      const res = await axios.get(`${url}/api/dte/status`);
+      setTesting(false);
+      if (res.status === 200) {
+        setOk(true);
+        toast.success("Conexión con DTE exitosa — Emisor validado correctamente");
+      } else {
+        setOk(false);
+        toast.error("La API de DTE no respondió con éxito.");
+      }
+    } catch (err) {
+      console.error(err);
+      setTesting(false);
+      setOk(false);
+      toast.error("Error al conectar con la API de DTE. Verifica la URL.");
+    }
   }
 
   async function handleFinish() {
     if (!biz) {
-      alert("Por favor ingresa el nombre de tu negocio.");
+      toast.error("Por favor ingresa el nombre de tu negocio.");
       setStep(1);
       return;
     }
     if (!adminName || !adminEmail || !adminPassword) {
-      alert("Por favor completa todos los campos de tu cuenta de administrador.");
+      toast.error("Por favor completa todos los campos de tu cuenta de administrador.");
       setStep(2);
       return;
     }
@@ -330,9 +353,10 @@ function Onboarding({ onDone }: { onDone: () => void }) {
     });
     
     if (success) {
+      toast.success("¡Registro completado con éxito!");
       onDone();
     } else {
-      alert("Error al registrar la empresa. El correo electrónico del administrador podría ya estar en uso.");
+      toast.error("Error al registrar la empresa. El correo electrónico del administrador podría ya estar en uso.");
     }
   }
 
@@ -446,7 +470,7 @@ export default function App() {
   const { user, config, fetchConfig, fetchSetupStatus, setupStatus } = usePOSStore();
   const [page, setPage] = useState<Page>("login");
   const [slim, setSlim] = useState(false);
-  const [dteConnected, setDteConnected] = useState(true);
+  const [dteConnected, setDteConnected] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -459,6 +483,16 @@ export default function App() {
         if (user) {
           if (hasConfig) {
             setPage("dashboard");
+            const currentStoreConfig = usePOSStore.getState().config;
+            if (currentStoreConfig?.dteUrl) {
+              try {
+                const res = await axios.get(`${currentStoreConfig.dteUrl}/api/dte/status`);
+                setDteConnected(res.status === 200);
+              } catch (err) {
+                console.error("DTE initial connection check failed:", err);
+                setDteConnected(false);
+              }
+            }
           } else {
             setPage("setup");
           }

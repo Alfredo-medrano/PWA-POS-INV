@@ -3,6 +3,7 @@ import {
   Search, Plus, Edit, Download, BoxIcon, ChevronLeft,
   ChevronRight, TrendingUp, TrendingDown
 } from "lucide-react";
+import { toast } from "sonner";
 import { usePOSStore } from "../store/usePOSStore";
 import { Btn, Badge, $, status, CATS } from "../components/Primitives";
 
@@ -52,8 +53,8 @@ export default function Inventory({ onNav }: { onNav: (p: any) => void }) {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Btn v="success" sz="sm" onClick={() => onNav("compras")}><Plus size={13} />Entrada de stock</Btn>
-          <Btn v="secondary" sz="sm" disabled onClick={() => alert("Próximamente: Los ajustes manuales de inventario estarán disponibles en una actualización futura.")}><Edit size={13} />Ajuste manual</Btn>
-          <Btn v="secondary" sz="sm" disabled onClick={() => alert("Próximamente: Exportación a Excel estará disponible en una actualización futura.")}><Download size={13} />Excel</Btn>
+          <Btn v="secondary" sz="sm" onClick={() => toast.info("Próximamente: Los ajustes manuales de inventario estarán disponibles en una actualización futura.")}><Edit size={13} />Ajuste manual</Btn>
+          <Btn v="secondary" sz="sm" onClick={() => toast.info("Próximamente: Exportación a Excel estará disponible en una actualización futura.")}><Download size={13} />Excel</Btn>
         </div>
       </div>
       <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm overflow-hidden">

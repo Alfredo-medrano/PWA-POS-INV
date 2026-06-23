@@ -81,3 +81,6 @@ desktop.ini
 scratch/
 scratch_test.cjs
 test_pos_api.cjs
+
+# Next.js build
+.next/

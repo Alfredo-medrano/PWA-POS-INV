@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import axios from 'axios';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
@@ -12,6 +13,7 @@ export interface Product {
   cost: number;
   price: number;
   img?: string;
+  barcode?: string;
 }
 
 export interface CartItem {
@@ -28,6 +30,7 @@ export interface Customer {
   dui?: string;
   phone?: string;
   email?: string;
+  address?: string;
   total: number;
   lastBuy?: string;
 }
@@ -187,7 +190,7 @@ interface POSState {
   receivePurchase: (id: string) => Promise<boolean>;
 
   fetchDashboardStats: () => Promise<void>;
-  fetchReportsStats: () => Promise<void>;
+  fetchReportsStats: (period?: string) => Promise<void>;
   fetchSales: () => Promise<void>;
   
   // Acciones de Inicialización/Setup
@@ -198,23 +201,25 @@ interface POSState {
   seedDatabase: () => Promise<boolean>;
 }
 
-export const usePOSStore = create<POSState>((set, get) => ({
-  products: [],
-  customers: [],
-  cart: [],
-  activeCustomer: null,
-  payMethod: 'Efectivo',
-  cashPaid: '',
-  emitDTE: false,
-  dteType: 'CF',
-  dteStatus: 'idle',
-  recentDteControl: '',
-  loadingProducts: false,
-  loadingCustomers: false,
+export const usePOSStore = create<POSState>()(
+  persist(
+    (set, get) => ({
+      products: [],
+      customers: [],
+      cart: [],
+      activeCustomer: null,
+      payMethod: 'Efectivo',
+      cashPaid: '',
+      emitDTE: false,
+      dteType: 'CF',
+      dteStatus: 'idle',
+      recentDteControl: '',
+      loadingProducts: false,
+      loadingCustomers: false,
 
   // Inicializar Nuevos Estados
   config: null,
-  user: JSON.parse(localStorage.getItem('pos_user') || 'null'),
+  user: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('pos_user') || 'null') : null,
   users: [],
   suppliers: [],
   purchases: [],
@@ -566,12 +571,13 @@ export const usePOSStore = create<POSState>((set, get) => ({
     }
   },
 
-  fetchReportsStats: async () => {
+  fetchReportsStats: async (period?: string) => {
     set({ loadingStats: true });
     try {
+      const p = period || 'mes';
       const [monthlyRes, productsRes, corteRes] = await Promise.all([
-        axios.get('/api/reportes/ventas'),
-        axios.get('/api/reportes/productos-top'),
+        axios.get(`/api/reportes/ventas?period=${p}`),
+        axios.get(`/api/reportes/productos-top?period=${p}`),
         axios.get('/api/reportes/corte-caja')
       ]);
       set({
@@ -601,16 +607,73 @@ export const usePOSStore = create<POSState>((set, get) => ({
 
   // Proceso de Venta
   processSale: async () => {
-    const { cart, activeCustomer, payMethod, emitDTE, dteType, user } = get();
+    const { cart, activeCustomer, payMethod, emitDTE, dteType, user, config } = get();
     if (cart.length === 0) return false;
 
-    set({ dteStatus: emitDTE ? 'processing' : 'idle' });
+    let statusDte = 'idle';
+    let controlNum = `DTE-${dteType === 'CF' ? '01' : '03'}-M001-${Math.floor(100000000 + Math.random() * 900000000)}`;
 
     const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.qty, 0);
     const iva = subtotal * 0.13;
     const total = subtotal + iva;
 
-    const controlNum = `DTE-${dteType === 'CF' ? '01' : '03'}-M001-${Math.floor(100000000 + Math.random() * 900000000)}`;
+    if (emitDTE) {
+      set({ dteStatus: 'processing' });
+      if (config && config.dteUrl) {
+        try {
+          // Map receptor document type and number
+          let tipoDocumento = '13'; // Default DUI
+          let numDocumento = '00000000-0';
+          if (activeCustomer) {
+            if (activeCustomer.nit) {
+              tipoDocumento = '36';
+              numDocumento = activeCustomer.nit;
+            } else if (activeCustomer.dui) {
+              tipoDocumento = '13';
+              numDocumento = activeCustomer.dui;
+            }
+          }
+
+          const dtePayload = {
+            tipoDte: dteType === 'CF' ? '01' : '03',
+            receptor: {
+              nombre: activeCustomer?.name || 'Consumidor Final',
+              correo: activeCustomer?.email || 'cliente@generico.com',
+              tipoDocumento: tipoDocumento,
+              numDocumento: numDocumento
+            },
+            items: cart.map(item => ({
+              descripcion: item.product.name,
+              cantidad: item.qty,
+              precioUnitario: item.product.price,
+              uniMedida: 59
+            })),
+            condicionOperacion: 1,
+            datosPago: {
+              periodo: null,
+              plazo: null,
+              monto: total
+            }
+          };
+
+          const headers: Record<string, string> = {};
+          if (config.dteKey) {
+            headers['Authorization'] = `Bearer ${config.dteKey}`;
+          }
+
+          const dteRes = await axios.post(`${config.dteUrl}/api/dte/v2/facturar`, dtePayload, { headers });
+          if (dteRes.data && dteRes.data.numeroControl) {
+            controlNum = dteRes.data.numeroControl;
+          }
+          statusDte = 'success';
+        } catch (err) {
+          console.error('Error calling Back-DTE API, falling back to contingencia:', err);
+          statusDte = 'contingencia';
+        }
+      } else {
+        statusDte = 'contingencia';
+      }
+    }
 
     const rawDteJson = {
       cajeroId: user?.id || '1',
@@ -634,8 +697,6 @@ export const usePOSStore = create<POSState>((set, get) => ({
       }
     };
 
-    const statusDte = emitDTE ? (Math.random() > 0.08 ? 'success' : 'contingencia') : 'idle';
-
     const payload: SalePayload = {
       total,
       payMethod,
@@ -650,7 +711,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
       await axios.post('/api/ventas', payload);
       
       set({ 
-        dteStatus: statusDte === 'success' ? 'success' : statusDte === 'contingencia' ? 'contingencia' : 'idle',
+        dteStatus: statusDte,
         recentDteControl: controlNum
       });
 
@@ -734,4 +795,18 @@ export const usePOSStore = create<POSState>((set, get) => ({
       return false;
     }
   }
-}));
+}),
+{
+  name: 'pos-checkout-store',
+  partialize: (state) => ({
+    cart: state.cart,
+    activeCustomer: state.activeCustomer,
+    payMethod: state.payMethod,
+    cashPaid: state.cashPaid,
+    emitDTE: state.emitDTE,
+    dteType: state.dteType,
+    user: state.user
+  })
+}
+)
+);

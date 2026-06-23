@@ -36,7 +36,7 @@ export default function Customers() {
       dui: c.dui || "",
       phone: c.phone || "",
       email: c.email || "",
-      addr: ""
+      addr: c.address || ""
     });
     setDrawer(true);
   }
@@ -66,7 +66,8 @@ export default function Customers() {
       nrc: form.nrc || undefined,
       dui: form.dui || undefined,
       phone: form.phone || undefined,
-      email: form.email || undefined
+      email: form.email || undefined,
+      address: form.addr || undefined
     };
 
     let success = false;

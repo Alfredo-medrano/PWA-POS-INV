@@ -20,7 +20,8 @@ export default function Products() {
     stock: "",
     minStock: "",
     cat: "Bebidas",
-    img: ""
+    img: "",
+    barcode: ""
   });
 
   useEffect(() => {
@@ -38,7 +39,8 @@ export default function Products() {
       price: String(p.price),
       stock: String(p.stock),
       minStock: String(p.minStock),
-      img: p.img || ""
+      img: p.img || "",
+      barcode: p.barcode || ""
     });
     setDrawer(true);
   }
@@ -53,7 +55,8 @@ export default function Products() {
       price: "",
       stock: "",
       minStock: "",
-      img: ""
+      img: "",
+      barcode: ""
     });
     setDrawer(true);
   }
@@ -69,7 +72,8 @@ export default function Products() {
       price: parseFloat(form.price) || 0,
       stock: parseInt(form.stock) || 0,
       minStock: parseInt(form.minStock) || 0,
-      img: form.img || undefined
+      img: form.img || undefined,
+      barcode: form.barcode || undefined
     };
 
     let success = false;
@@ -170,7 +174,7 @@ export default function Products() {
                     <Input label="Nombre del producto *" placeholder="ej. Coca-Cola 2L" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
                     <div className="grid grid-cols-2 gap-3">
                       <Input label="SKU / Código" placeholder="CC2L" value={form.sku} onChange={v => setForm(f => ({ ...f, sku: v }))} />
-                      <Input label="Código de barras" placeholder="7501055300227" value="" onChange={() => {}} icon={Hash} />
+                      <Input label="Código de barras" placeholder="7501055300227" value={form.barcode} onChange={v => setForm(f => ({ ...f, barcode: v }))} icon={Hash} />
                     </div>
                     <div className="border-2 border-dashed border-[#E2E8F0] rounded-xl p-5 text-center hover:border-[#1B4FD8]/40 hover:bg-[#EEF2FF]/20 transition-all cursor-pointer"><Camera size={20} className="text-[#CBD5E1] mx-auto mb-1.5" /><p className="text-xs text-[#94A3B8] font-medium">Clic para subir imagen (URL)</p></div>
                     <Input label="URL de la imagen" placeholder="https://..." value={form.img} onChange={v => setForm(f => ({ ...f, img: v }))} />
