@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard, ShoppingCart, Package, Tag, Truck, Users,
   BarChart2, Settings, Menu, X, Search, Bell, ChevronLeft,
   ChevronRight, Check, CheckCircle, Smartphone, Home, LogOut,
-  Zap, Clock, Wifi, WifiOff, RefreshCw, Lock, AtSign, Building2, Phone, MapPin, Globe
+  Zap, Clock, Wifi, WifiOff, RefreshCw, Lock, AtSign, Building2, Phone, MapPin, Globe, Activity
 } from "lucide-react";
 
 // Importar Vistas Modulares
@@ -15,6 +15,9 @@ import Purchases from "./pages/Purchases";
 import Customers from "./pages/Customers";
 import Reports from "./pages/Reports";
 import Config from "./pages/Config";
+
+// Importar usePOSStore
+import { usePOSStore } from "./store/usePOSStore";
 
 // Importar Primitivos
 import { DTEPill, Btn, Input, Badge } from "./components/Primitives";
@@ -77,7 +80,7 @@ function Sidebar({ page, onNav, slim, onToggle }: { page: Page; onNav: (p: Page)
 // ─── TopBar Component ─────────────────────────────────────────────────────────
 function TopBar({ dte, onMenu }: { dte: boolean; onMenu: () => void }) {
   const user = usePOSStore(state => state.user);
-  const initials = user ? user.name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase() : "CG";
+  const initials = user ? user.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase() : "CG";
   return (
     <header className="fixed top-0 right-0 left-0 z-20 h-[60px] bg-white/80 backdrop-blur-md border-b border-[#E2E8F0] flex items-center px-4 gap-3">
       <button className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-[#64748B] hover:bg-slate-100 transition-colors" onClick={onMenu}>

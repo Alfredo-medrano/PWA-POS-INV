@@ -200,7 +200,7 @@ export default function Purchases() {
                     <td className="px-4 py-3 font-mono text-[#64748B]">{s.phone || "—"}</td>
                     <td className="px-4 py-3 font-mono text-[#64748B]">{s.nrc || "—"}</td>
                     <td className="px-4 py-3 text-[#64748B]">{s.email || "—"}</td>
-                    <td className="px-4 py-3 text-[#64748B]">{s.last_buy || s.last || "—"}</td>
+                    <td className="px-4 py-3 text-[#64748B]">{s.last_buy || "—"}</td>
                   </tr>
                 ))}
                 {suppliers.length === 0 && (
