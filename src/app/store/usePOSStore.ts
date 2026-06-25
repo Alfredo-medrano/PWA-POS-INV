@@ -42,6 +42,7 @@ export interface User {
   role: string;
   status: string;
   tenantId?: string;
+  tenantSlug?: string;
 }
 
 export interface Supplier {
@@ -65,6 +66,8 @@ export interface Purchase {
 }
 
 export interface BusinessConfig {
+  tenantId?: string;
+  tenantSlug?: string;
   bizName: string;
   bizType?: string;
   bizPhone?: string;
@@ -178,7 +181,7 @@ interface POSState {
   login: (email: string, password: string, tenantId?: string) => Promise<boolean>;
   globalLogin: (email: string, password: string) => Promise<{ success: boolean; tenantSlug?: string; error?: string }>;
   logout: () => void;
-  register: (name: string, email: string, password: string) => Promise<boolean>;
+  register: (name: string, email: string, password: string, tenantId?: string) => Promise<boolean>;
   forgotPassword: (email: string, tenantId?: string) => Promise<string | null>;
   
   fetchUsers: () => Promise<void>;
@@ -456,9 +459,9 @@ export const usePOSStore = create<POSState>()(
     localStorage.removeItem('pos_user');
   },
 
-  register: async (name, email, password) => {
+  register: async (name, email, password, tenantId) => {
     try {
-      const res = await axios.post('/api/auth/register', { name, email, password });
+      const res = await axios.post('/api/auth/register', { name, email, password, tenantId });
       if (res.data && res.data.success) {
         set({ user: res.data.user });
         localStorage.setItem('pos_user', JSON.stringify(res.data.user));

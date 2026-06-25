@@ -48,7 +48,8 @@ export async function POST(request: Request) {
       email: u.email, 
       role: u.role, 
       status: u.status,
-      tenantId: u.tenant_id 
+      tenantId: u.tenant_id,
+      tenantSlug: tenant.slug
     };
 
     const response = NextResponse.json({ 

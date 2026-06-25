@@ -12,8 +12,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El correo y la contraseña son obligatorios' }, { status: 400 });
     }
 
+    // Resolver slug o ID a la clave física UUID del tenant
+    const tenantRes = await pool.query('SELECT id, slug FROM tenants WHERE id = $1 OR slug = $1', [tenantId]);
+    if (tenantRes.rowCount === 0) {
+      return NextResponse.json({ error: 'Empresa no registrada' }, { status: 404 });
+    }
+    const resolvedTenantId = tenantRes.rows[0].id;
+    const resolvedTenantSlug = tenantRes.rows[0].slug;
+
     // Buscar al usuario dentro del contexto del tenant especificado
-    const result = await runWithTenant(tenantId, () =>
+    const result = await runWithTenant(resolvedTenantId, () =>
       pool.query('SELECT * FROM usuarios WHERE email = $1', [email])
     );
 
@@ -31,14 +39,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El usuario está inactivo' }, { status: 403 });
     }
     
-    // Crear respuesta con cookie pos_session que incluye el tenantId
+    // Crear respuesta con cookie pos_session que incluye el resolvedTenantId
     const response = NextResponse.json({ 
       id: u.id, 
       name: u.name, 
       email: u.email, 
       role: u.role, 
       status: u.status,
-      tenantId: u.tenant_id 
+      tenantId: u.tenant_id,
+      tenantSlug: resolvedTenantSlug
     });
     
     response.cookies.set('pos_session', JSON.stringify({ id: u.id, role: u.role, tenantId: u.tenant_id }), {

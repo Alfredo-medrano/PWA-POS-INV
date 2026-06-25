@@ -21,8 +21,13 @@ export default function Home() {
 
   useEffect(() => {
     // Si el usuario ya tiene sesión activa, redirigir inmediatamente a su espacio
-    if (user && user.tenantId) {
-      router.push(`/t/${user.tenantId}`);
+    if (user) {
+      const targetSlug = user.tenantSlug || user.tenantId;
+      if (targetSlug) {
+        router.push(`/t/${targetSlug}`);
+      } else {
+        setRedirecting(false);
+      }
     } else {
       setRedirecting(false);
     }

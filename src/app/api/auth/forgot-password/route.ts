@@ -12,8 +12,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El correo electrónico es obligatorio' }, { status: 400 });
     }
 
+    // Resolver slug o ID a la clave física UUID del tenant
+    const tenantRes = await pool.query('SELECT id FROM tenants WHERE id = $1 OR slug = $1', [tenantId]);
+    if (tenantRes.rowCount === 0) {
+      return NextResponse.json({ error: 'Empresa no registrada' }, { status: 404 });
+    }
+    const resolvedTenantId = tenantRes.rows[0].id;
+
     // Ejecutar la consulta del usuario dentro del contexto del tenant
-    const userRes = await runWithTenant(tenantId, () =>
+    const userRes = await runWithTenant(resolvedTenantId, () =>
       pool.query('SELECT id, name FROM usuarios WHERE email = $1', [email])
     );
     
@@ -28,7 +35,7 @@ export async function POST(request: Request) {
     const hashedTemp = await bcrypt.hash(rawTempPassword, 12);
 
     // Actualizar contraseña dentro del contexto del tenant
-    await runWithTenant(tenantId, () =>
+    await runWithTenant(resolvedTenantId, () =>
       pool.query('UPDATE usuarios SET password = $1 WHERE id = $2', [hashedTemp, u.id])
     );
 

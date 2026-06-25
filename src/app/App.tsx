@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  LayoutDashboard, ShoppingCart, Package, Tag, Truck, Users, User,
+  LayoutDashboard, ShoppingCart, Package, Tag, Truck, Users, User as UserIcon,
   BarChart2, Settings, Menu, X, Search, Bell, ChevronLeft,
   ChevronRight, Check, CheckCircle, Smartphone, Home, LogOut,
   Zap, Clock, Wifi, WifiOff, RefreshCw, Lock, AtSign, Building2, Phone, MapPin, Globe, Activity,
@@ -236,7 +236,7 @@ function Login({ onLogin, tenantId }: { onLogin: () => void; tenantId?: string }
     }
     setLoading(true);
     setError(null);
-    const ok = await register(name, email, pw);
+    const ok = await register(name, email, pw, tenantId);
     setLoading(false);
     if (ok) {
       toast.success("¡Registro completado e inicio de sesión exitoso!");
@@ -345,7 +345,7 @@ function Login({ onLogin, tenantId }: { onLogin: () => void; tenantId?: string }
               <h2 className="text-3xl font-bold text-[#0F172A] mb-1 tracking-tight">Crea tu cuenta</h2>
               <p className="text-[#64748B] text-sm mb-8">Regístrate como usuario para comenzar a vender</p>
               <div className="space-y-4">
-                <Input label="Nombre completo" type="text" placeholder="ej. Juan Pérez" value={name} onChange={setName} icon={User} />
+                <Input label="Nombre completo" type="text" placeholder="ej. Juan Pérez" value={name} onChange={setName} icon={UserIcon} />
                 <Input label="Correo electrónico" type="email" placeholder="correo@empresa.com" value={email} onChange={setEmail} icon={AtSign} />
                 <div>
                   <label className="text-sm font-semibold text-[#0F172A] block mb-1">Contraseña</label>
@@ -556,7 +556,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
             <div className="space-y-5">
               <h2 className="text-xl font-bold text-[#0F172A]">Cuenta del Administrador</h2>
               <p className="text-xs text-[#64748B] -mt-3">Esta cuenta tendrá acceso total para configurar y administrar el sistema</p>
-              <Input label="Nombre completo *" placeholder="Ingresa tu nombre completo" value={adminName} onChange={setAdminName} icon={User} />
+              <Input label="Nombre completo *" placeholder="Ingresa tu nombre completo" value={adminName} onChange={setAdminName} icon={UserIcon} />
               <Input label="Correo electrónico *" type="email" placeholder="admin@minegocio.com.sv" value={adminEmail} onChange={setAdminEmail} icon={AtSign} />
               <Input label="Contraseña de acceso *" type="password" placeholder="Mínimo 6 caracteres" value={adminPassword} onChange={setAdminPassword} icon={Lock} />
             </div>
@@ -637,7 +637,7 @@ export default function App({ tenantId }: { tenantId?: string }) {
         
         if (currentStoreConfig?.trialExpired || currentStoreConfig?.tenantStatus === 'suspended') {
           setPage("trialExpired");
-        } else if (user && user.tenantId === tenantId) {
+        } else if (user && (user.tenantId === currentStoreConfig?.tenantId || user.tenantId === currentStoreConfig?.tenantSlug)) {
           setPage("dashboard");
           if (currentStoreConfig?.dteUrl) {
             try {

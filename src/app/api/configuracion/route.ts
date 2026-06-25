@@ -11,15 +11,17 @@ export async function GET(request: Request) {
     let trialExpired = false;
     let tenantStatus = 'active';
     let resolvedTenantId = queryTenantId;
+    let resolvedTenantSlug = null;
 
     if (queryTenantId) {
       // Buscar tenant por id o por slug
-      const tenantRes = await pool.query('SELECT id, plan, status, trial_ends_at FROM tenants WHERE id = $1 OR slug = $1', [queryTenantId]);
+      const tenantRes = await pool.query('SELECT id, slug, plan, status, trial_ends_at FROM tenants WHERE id = $1 OR slug = $1', [queryTenantId]);
       if (tenantRes.rowCount === 0) {
         return NextResponse.json({ error: 'Negocio no encontrado' }, { status: 404 });
       }
       const tenant = tenantRes.rows[0];
       resolvedTenantId = tenant.id;
+      resolvedTenantSlug = tenant.slug;
       tenantStatus = tenant.status;
       if (tenant.plan === 'demo' && new Date(tenant.trial_ends_at) < new Date()) {
         trialExpired = true;
@@ -35,6 +37,8 @@ export async function GET(request: Request) {
 
     if (result.rowCount === 0) {
       return NextResponse.json({ 
+        tenantId: resolvedTenantId,
+        tenantSlug: resolvedTenantSlug,
         bizName: 'Configuración pendiente',
         trialExpired,
         tenantStatus
@@ -42,6 +46,8 @@ export async function GET(request: Request) {
     }
     const r = result.rows[0];
     return NextResponse.json({
+      tenantId: resolvedTenantId,
+      tenantSlug: resolvedTenantSlug,
       bizName: r.biz_name,
       bizType: r.biz_type,
       bizPhone: r.biz_phone,

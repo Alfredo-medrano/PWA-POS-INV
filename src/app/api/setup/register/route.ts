@@ -40,6 +40,7 @@ export async function POST(request: Request) {
 
     // 3. Crear configuración, administrador y sembrar datos opcionales dentro de su contexto
     const client = await pool.connect();
+    const adminId = crypto.randomUUID();
     try {
       // runWithTenant asegura que el tenant_id actual esté fijado en el almacenamiento local asíncrono
       await runWithTenant(tenantId, async () => {
@@ -52,7 +53,6 @@ export async function POST(request: Request) {
         `, [tenantId, bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null]);
 
         // Crear el administrador inicial de este tenant
-        const adminId = crypto.randomUUID();
         const hashedPw = await bcrypt.hash(adminPassword, 12);
         await client.query(`
           INSERT INTO usuarios (id, name, email, password, role, status)
@@ -119,15 +119,17 @@ export async function POST(request: Request) {
         success: true,
         tenantSlug: slug,
         user: {
-          id: tenantId,
+          id: adminId,
           name: adminName,
           email: adminEmail,
           role: 'Administrador',
-          status: 'Activo'
+          status: 'Activo',
+          tenantId: tenantId,
+          tenantSlug: slug
         }
       }, { status: 201 });
 
-      response.cookies.set('pos_session', JSON.stringify({ id: tenantId, role: 'Administrador', tenantId }), {
+      response.cookies.set('pos_session', JSON.stringify({ id: adminId, role: 'Administrador', tenantId }), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',

@@ -2,15 +2,24 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { runWithTenant } from '@/lib/tenant';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, email, password } = body;
+    const { name, email, password, tenantId = 'single' } = body;
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: 'Todos los campos son obligatorios' }, { status: 400 });
     }
+
+    // Resolver slug o ID a la clave física UUID del tenant
+    const tenantRes = await pool.query('SELECT id, slug FROM tenants WHERE id = $1 OR slug = $1', [tenantId]);
+    if (tenantRes.rowCount === 0) {
+      return NextResponse.json({ error: 'Empresa no registrada' }, { status: 404 });
+    }
+    const resolvedTenantId = tenantRes.rows[0].id;
+    const resolvedTenantSlug = tenantRes.rows[0].slug;
 
     // Check if email already exists
     const checkUser = await pool.query('SELECT id FROM usuarios WHERE email = $1', [email]);
@@ -22,16 +31,27 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(password, 12);
     const id = crypto.randomUUID();
 
-    // Insert user
-    await pool.query(
-      'INSERT INTO usuarios (id, name, email, password, role, status) VALUES ($1, $2, $3, $4, $5, $6)',
-      [id, name, email, hashedPassword, 'Cajero', 'Activo']
+    // Insert user within the tenant's context
+    await runWithTenant(resolvedTenantId, () =>
+      pool.query(
+        'INSERT INTO usuarios (id, name, email, password, role, status) VALUES ($1, $2, $3, $4, $5, $6)',
+        [id, name, email, hashedPassword, 'Cajero', 'Activo']
+      )
     );
 
-    const userPayload = { id, name, email, role: 'Cajero', status: 'Activo' };
+    const userPayload = { 
+      id, 
+      name, 
+      email, 
+      role: 'Cajero', 
+      status: 'Activo',
+      tenantId: resolvedTenantId,
+      tenantSlug: resolvedTenantSlug
+    };
+    
     const response = NextResponse.json({ success: true, user: userPayload }, { status: 201 });
     
-    response.cookies.set('pos_session', JSON.stringify({ id, role: 'Cajero' }), {
+    response.cookies.set('pos_session', JSON.stringify({ id, role: 'Cajero', tenantId: resolvedTenantId }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
