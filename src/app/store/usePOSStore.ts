@@ -182,7 +182,7 @@ interface POSState {
   globalLogin: (email: string, password: string) => Promise<{ success: boolean; tenantSlug?: string; error?: string }>;
   logout: () => Promise<void>;
   register: (name: string, email: string, password: string, tenantId?: string) => Promise<boolean>;
-  forgotPassword: (email: string, tenantId?: string) => Promise<string | null>;
+  forgotPassword: (email: string, tenantId?: string) => Promise<boolean>;
   
   fetchUsers: () => Promise<void>;
   createUser: (usr: Omit<User, 'id'> & { password?: string }) => Promise<boolean>;
@@ -482,13 +482,10 @@ export const usePOSStore = create<POSState>()(
   forgotPassword: async (email, tenantId) => {
     try {
       const res = await axios.post('/api/auth/forgot-password', { email, tenantId });
-      if (res.data && res.data.success) {
-        return res.data.tempPassword;
-      }
-      return null;
+      return !!(res.data && res.data.success);
     } catch (err) {
       console.error(err);
-      return null;
+      return false;
     }
   },
 
@@ -666,112 +663,33 @@ export const usePOSStore = create<POSState>()(
 
   // Proceso de Venta
   processSale: async () => {
-    const { cart, activeCustomer, payMethod, emitDTE, dteType, user, config } = get();
+    const { cart, activeCustomer, payMethod, emitDTE, dteType } = get();
     if (cart.length === 0) return false;
-
-    let statusDte: 'idle' | 'processing' | 'success' | 'contingencia' = 'idle';
-    let controlNum = `DTE-${dteType === 'CF' ? '01' : '03'}-M001-${Math.floor(100000000 + Math.random() * 900000000)}`;
-
-    const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.qty, 0);
-    const iva = subtotal * 0.13;
-    const total = subtotal + iva;
 
     if (emitDTE) {
       set({ dteStatus: 'processing' });
-      if (config && config.dteUrl) {
-        try {
-          // Map receptor document type and number
-          let tipoDocumento = '13'; // Default DUI
-          let numDocumento = '00000000-0';
-          if (activeCustomer) {
-            if (activeCustomer.nit) {
-              tipoDocumento = '36';
-              numDocumento = activeCustomer.nit;
-            } else if (activeCustomer.dui) {
-              tipoDocumento = '13';
-              numDocumento = activeCustomer.dui;
-            }
-          }
-
-          const dtePayload = {
-            tipoDte: dteType === 'CF' ? '01' : '03',
-            receptor: {
-              nombre: activeCustomer?.name || 'Consumidor Final',
-              correo: activeCustomer?.email || 'cliente@generico.com',
-              tipoDocumento: tipoDocumento,
-              numDocumento: numDocumento
-            },
-            items: cart.map(item => ({
-              descripcion: item.product.name,
-              cantidad: item.qty,
-              precioUnitario: item.product.price,
-              uniMedida: 59
-            })),
-            condicionOperacion: 1,
-            datosPago: {
-              periodo: null,
-              plazo: null,
-              monto: total
-            }
-          };
-
-          const headers: Record<string, string> = {};
-          if (config.dteKey) {
-            headers['Authorization'] = `Bearer ${config.dteKey}`;
-          }
-
-          const dteRes = await axios.post(`${config.dteUrl}/api/dte/v2/facturar`, dtePayload, { headers });
-          if (dteRes.data && dteRes.data.numeroControl) {
-            controlNum = dteRes.data.numeroControl;
-          }
-          statusDte = 'success';
-        } catch (err) {
-          console.error('Error calling Back-DTE API, falling back to contingencia:', err);
-          statusDte = 'contingencia';
-        }
-      } else {
-        statusDte = 'contingencia';
-      }
     }
 
-    const rawDteJson = {
-      cajeroId: user?.id || '1',
-      cajeroName: user?.name || 'Cajero General',
-      identificacion: {
-        version: dteType === 'CF' ? 1 : 3,
-        numeroControl: controlNum,
-        tipoDte: dteType === 'CF' ? '01' : '03',
-        fecEmi: new Date().toISOString().split('T')[0]
-      },
-      detalles: cart.map(item => ({
-        descripcion: item.product.name,
-        cantidad: item.qty,
-        precioUnitario: item.product.price,
-        monto: item.product.price * item.qty
-      })),
-      totales: {
-        subtotal,
-        iva,
-        total
-      }
-    };
-
-    const payload: SalePayload = {
-      total,
+    const payload = {
       payMethod,
-      dteStatus: statusDte,
+      emitDTE,
       dteType,
       cart,
-      customer: activeCustomer ? { id: activeCustomer.id, name: activeCustomer.name } : null,
-      rawDteJson
+      customer: activeCustomer ? { 
+        id: activeCustomer.id, 
+        name: activeCustomer.name,
+        email: activeCustomer.email,
+        nit: activeCustomer.nit,
+        dui: activeCustomer.dui
+      } : null
     };
 
     try {
-      await axios.post('/api/ventas', payload);
+      const res = await axios.post('/api/ventas', payload);
       
       set({ 
-        dteStatus: statusDte,
-        recentDteControl: controlNum
+        dteStatus: res.data.dteStatus || 'idle',
+        recentDteControl: res.data.controlNum || ''
       });
 
       await get().fetchProducts();

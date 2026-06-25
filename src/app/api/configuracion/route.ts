@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { runWithTenant } from '@/lib/tenant';
+import { requireRole } from '@/lib/auth';
 import crypto from 'crypto';
+
+function handleAuthError(err: any) {
+  if (err.message === 'UNAUTHORIZED') {
+    return NextResponse.json({ error: 'No autorizado. Por favor inicia sesión.' }, { status: 401 });
+  }
+  if (err.message === 'FORBIDDEN') {
+    return NextResponse.json({ error: 'Acceso denegado. Permisos insuficientes.' }, { status: 403 });
+  }
+  return null;
+}
 
 export async function GET(request: Request) {
   try {
@@ -53,7 +64,8 @@ export async function GET(request: Request) {
       bizPhone: r.biz_phone,
       bizAddress: r.biz_address,
       dteUrl: r.dte_url,
-      dteKey: r.dte_key,
+      // Retornar máscara segura si existe llave, nunca la clave real en texto plano
+      dteKey: r.dte_key ? '••••••••' : '',
       aperturaCaja: parseFloat(r.apertura_caja) || 200.00,
       trialExpired,
       tenantStatus
@@ -66,28 +78,38 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    await requireRole(['Administrador']);
     const body = await request.json();
     const { bizName, bizType, bizPhone, bizAddress, dteUrl, dteKey, aperturaCaja } = body;
     
-    const check = await pool.query('SELECT id FROM configuracion LIMIT 1');
+    const check = await pool.query('SELECT id, dte_key FROM configuracion LIMIT 1');
     if (check.rowCount > 0) {
       const id = check.rows[0].id;
+      const oldDteKey = check.rows[0].dte_key;
+      // Preservar la clave existente si el cliente envía la máscara de vuelta
+      const finalDteKey = dteKey === '••••••••' ? oldDteKey : dteKey;
+      
       await pool.query(`
         UPDATE configuracion
         SET biz_name = $1, biz_type = $2, biz_phone = $3, biz_address = $4, dte_url = $5, dte_key = $6, apertura_caja = $7, updated_at = CURRENT_TIMESTAMP
         WHERE id = $8
-      `, [bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null, parseFloat(aperturaCaja) || 200.00, id]);
+      `, [bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, finalDteKey || null, parseFloat(aperturaCaja) || 200.00, id]);
       return NextResponse.json({ success: true, message: 'Configuración actualizada' });
     } else {
       const id = crypto.randomUUID();
+      const finalDteKey = dteKey === '••••••••' ? null : dteKey;
+      
       await pool.query(`
         INSERT INTO configuracion (id, biz_name, biz_type, biz_phone, biz_address, dte_url, dte_key, apertura_caja)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `, [id, bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null, parseFloat(aperturaCaja) || 200.00]);
+      `, [id, bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, finalDteKey || null, parseFloat(aperturaCaja) || 200.00]);
       return NextResponse.json({ success: true, message: 'Configuración creada' }, { status: 201 });
     }
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al guardar configuración' }, { status: 500 });
   }
 }
+
