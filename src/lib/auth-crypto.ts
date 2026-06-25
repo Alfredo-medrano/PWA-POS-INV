@@ -24,7 +24,10 @@ async function getHmacSignature(payload: string, secret: string): Promise<string
   const data = encoder.encode(payload);
   
   // Use globalThis.crypto to support both standard Node.js and Next.js Edge Runtime
-  const cryptoObj = typeof globalThis !== 'undefined' && globalThis.crypto ? globalThis.crypto : (await import('crypto')).default;
+  const cryptoObj = (typeof globalThis !== 'undefined' && globalThis.crypto ? globalThis.crypto : null) as any;
+  if (!cryptoObj) {
+    throw new Error("Web Crypto API is not available in this environment.");
+  }
   const key = await cryptoObj.subtle.importKey(
     'raw',
     keyData,
