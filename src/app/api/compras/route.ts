@@ -1,8 +1,20 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireRole } from '@/lib/auth';
+
+function handleAuthError(err: any) {
+  if (err.message === 'UNAUTHORIZED') {
+    return NextResponse.json({ error: 'No autorizado. Por favor inicia sesión.' }, { status: 401 });
+  }
+  if (err.message === 'FORBIDDEN') {
+    return NextResponse.json({ error: 'Acceso denegado. Permisos insuficientes.' }, { status: 403 });
+  }
+  return null;
+}
 
 export async function GET() {
   try {
+    await requireRole(['Administrador']);
     const result = await pool.query('SELECT * FROM compras ORDER BY created_at DESC');
     const list = result.rows.map(r => ({
       id: r.id,
@@ -15,7 +27,9 @@ export async function GET() {
       items: r.items_json
     }));
     return NextResponse.json(list);
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al obtener compras' }, { status: 500 });
   }
@@ -23,9 +37,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    await requireRole(['Administrador']);
     const body = await request.json();
     const { supplierId, supplierName, items, status, total } = body;
-    const id = `OC-${Math.floor(100 + Math.random() * 900)}`;
+    // Evitar colisión de IDs generando un consecutivo basado en timestamp + 4 dígitos aleatorios
+    const id = `OC-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const itemsCount = items.reduce((s: number, i: any) => s + parseInt(i.qty), 0);
     
     const client = await pool.connect();
@@ -63,8 +79,11 @@ export async function POST(request: Request) {
     } finally {
       client.release();
     }
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al registrar compra' }, { status: 500 });
   }
 }
+

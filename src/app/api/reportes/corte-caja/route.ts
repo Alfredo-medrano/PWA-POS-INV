@@ -24,7 +24,6 @@ export async function GET() {
     let cash = 0.00;
     let card = 0.00;
     let transfer = 0.00;
-    let egresos = 0.00;
 
     result.rows.forEach(r => {
       const t = parseFloat(r.total);
@@ -32,6 +31,18 @@ export async function GET() {
       else if (r.pay_method === 'Tarjeta') card += t;
       else if (r.pay_method === 'Transferencia') transfer += t;
     });
+
+    // Calcular egresos reales registrados hoy
+    const egresosRes = await pool.query(`
+      SELECT SUM(amount) as total_egresos 
+      FROM egresos 
+      WHERE created_at >= $1
+    `, [startOfToday]);
+
+    let egresos = 0.00;
+    if (egresosRes.rowCount > 0 && egresosRes.rows[0].total_egresos) {
+      egresos = parseFloat(egresosRes.rows[0].total_egresos);
+    }
 
     const totalEsperado = apertura + cash + card + transfer - egresos;
 

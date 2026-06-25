@@ -1,8 +1,20 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireRole } from '@/lib/auth';
+
+function handleAuthError(err: any) {
+  if (err.message === 'UNAUTHORIZED') {
+    return NextResponse.json({ error: 'No autorizado. Por favor inicia sesión.' }, { status: 401 });
+  }
+  if (err.message === 'FORBIDDEN') {
+    return NextResponse.json({ error: 'Acceso denegado. Permisos insuficientes.' }, { status: 403 });
+  }
+  return null;
+}
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
+    await requireRole(['Administrador']);
     const { id } = params;
     const client = await pool.connect();
     try {
@@ -48,7 +60,10 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       client.release();
     }
   } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: err.message || 'Error al recibir compra' }, { status: 500 });
   }
 }
+

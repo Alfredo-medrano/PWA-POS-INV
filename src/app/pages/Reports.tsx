@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import axios from "axios";
+import { toast } from "sonner";
 import {
   TrendingUp, Package, Star, Receipt, Users, Truck,
-  Download, FileSpreadsheet, BarChart2, RefreshCw, Percent
+  Download, FileSpreadsheet, BarChart2, RefreshCw, Percent, DollarSign, Plus
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -9,6 +11,7 @@ import {
 } from "recharts";
 import { usePOSStore } from "../store/usePOSStore";
 import { Btn, Badge, $ } from "../components/Primitives";
+
 
 export default function Reports() {
   const {
@@ -27,6 +30,58 @@ export default function Reports() {
 
   const [period, setPeriod] = useState("mes");
   const [active, setActive] = useState("ventas");
+
+  // Estados y funciones para Egresos de Caja (Salidas de Caja)
+  const [egresos, setEgresos] = useState<any[]>([]);
+  const [egresoAmount, setEgresoAmount] = useState("");
+  const [egresoConcept, setEgresoConcept] = useState("");
+  const [loadingEgresos, setLoadingEgresos] = useState(false);
+  const [submittingEgreso, setSubmittingEgreso] = useState(false);
+
+  async function fetchEgresos() {
+    setLoadingEgresos(true);
+    try {
+      const res = await axios.get("/api/egresos");
+      setEgresos(res.data || []);
+    } catch (err) {
+      console.error("Error al obtener egresos:", err);
+    } finally {
+      setLoadingEgresos(false);
+    }
+  }
+
+  async function handleAddEgreso(e: React.FormEvent) {
+    e.preventDefault();
+    if (!egresoAmount || !egresoConcept) {
+      toast.error("Completa el monto y el concepto del egreso.");
+      return;
+    }
+    const amt = parseFloat(egresoAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error("El monto debe ser un número positivo.");
+      return;
+    }
+    setSubmittingEgreso(true);
+    try {
+      await axios.post("/api/egresos", { amount: amt, concept: egresoConcept });
+      toast.success("Egreso registrado con éxito.");
+      setEgresoAmount("");
+      setEgresoConcept("");
+      await fetchEgresos();
+      await fetchReportsStats(period);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Error al registrar egreso.");
+    } finally {
+      setSubmittingEgreso(false);
+    }
+  }
+
+  useEffect(() => {
+    if (active === "cortes") {
+      fetchEgresos();
+    }
+  }, [active]);
 
   useEffect(() => {
     fetchReportsStats(period);
@@ -253,20 +308,85 @@ export default function Reports() {
       )}
 
       {active === "cortes" && (
-        <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6">
-          <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-            <h3 className="font-black text-[#0F172A]">Corte de caja — hoy</h3>
+        <div className="space-y-5">
+          <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6">
+            <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+              <h3 className="font-black text-[#0F172A]">Corte de Caja Diario (Resumen de Hoy)</h3>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {corteCaja.map(i => (
+                <div key={i.l} className="bg-slate-50 rounded-xl p-4 ring-1 ring-[#E2E8F0]">
+                  <p className="text-xs text-[#94A3B8] font-medium mb-1.5">{i.l}</p>
+                  <p className={`text-base font-black tabular-nums ${i.c || "text-[#0F172A]"}`}>{$(i.v)}</p>
+                </div>
+              ))}
+              {corteCaja.length === 0 && (
+                <div className="col-span-3 text-center py-10 text-xs text-[#94A3B8]">Sin datos para generar corte.</div>
+              )}
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {corteCaja.map(i => (
-              <div key={i.l} className="bg-slate-50 rounded-xl p-4 ring-1 ring-[#E2E8F0]">
-                <p className="text-xs text-[#94A3B8] font-medium mb-1.5">{i.l}</p>
-                <p className={`text-base font-black tabular-nums ${i.c || "text-[#0F172A]"}`}>{$(i.v)}</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Formulario para registrar egreso */}
+            <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-4">
+              <div>
+                <h3 className="font-black text-[#0F172A]">Registrar Salida de Caja (Egreso)</h3>
+                <p className="text-xs text-[#94A3B8] mt-0.5">Registra gastos menores o retiros de efectivo de la caja chica</p>
               </div>
-            ))}
-            {corteCaja.length === 0 && (
-              <div className="col-span-3 text-center py-10 text-xs text-[#94A3B8]">Sin datos para generar corte.</div>
-            )}
+              <form onSubmit={handleAddEgreso} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-[#0F172A] block mb-1.5">Concepto / Descripción *</label>
+                  <input type="text" value={egresoConcept} onChange={e => setEgresoConcept(e.target.value)} placeholder="Ej. Pago de basura, Compra de hielo"
+                    className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#0F172A] block mb-1.5">Monto ($) *</label>
+                  <div className="relative">
+                    <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+                    <input type="number" step="0.01" min="0.01" value={egresoAmount} onChange={e => setEgresoAmount(e.target.value)} placeholder="0.00"
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]" />
+                  </div>
+                </div>
+                <Btn v="primary" type="submit" disabled={submittingEgreso || !egresoConcept || !egresoAmount} className="w-full justify-center">
+                  {submittingEgreso ? "Registrando..." : <><Plus size={13} /> Registrar Egreso</>}
+                </Btn>
+              </form>
+            </div>
+
+            {/* Listado de egresos de hoy */}
+            <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-4">
+              <div>
+                <h3 className="font-black text-[#0F172A]">Egresos Registrados Hoy</h3>
+                <p className="text-xs text-[#94A3B8] mt-0.5">Lista de salidas de dinero registradas durante el turno de hoy</p>
+              </div>
+              <div className="overflow-y-auto max-h-60 border border-[#E2E8F0] rounded-xl">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 border-b border-[#E2E8F0] sticky top-0">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 font-bold text-[#94A3B8]">Concepto</th>
+                      <th className="text-left px-4 py-2.5 font-bold text-[#94A3B8]">Hora</th>
+                      <th className="text-right px-4 py-2.5 font-bold text-[#94A3B8]">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {egresos.map(e => (
+                      <tr key={e.id} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3 font-semibold text-[#0F172A]">{e.concept}</td>
+                        <td className="px-4 py-3 text-[#64748B] font-mono">
+                          {new Date(e.createdAt).toLocaleTimeString("es-SV", { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </td>
+                        <td className="px-4 py-3 text-right font-black text-red-600 tabular-nums">-{$(e.amount)}</td>
+                      </tr>
+                    ))}
+                    {egresos.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="text-center py-10 text-[#94A3B8] font-medium">No se han registrado egresos hoy.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}

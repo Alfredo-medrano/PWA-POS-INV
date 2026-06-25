@@ -183,8 +183,18 @@ async function initDatabase() {
       )
     `);
 
+    // 8. Egresos
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS egresos (
+        id VARCHAR(36) PRIMARY KEY,
+        amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        concept TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // --- MIGRACIÓN MULTITENANT ---
-    const tablesToMigrate = ['productos', 'clientes', 'ventas', 'configuracion', 'usuarios', 'proveedores', 'compras'];
+    const tablesToMigrate = ['productos', 'clientes', 'ventas', 'configuracion', 'usuarios', 'proveedores', 'compras', 'egresos'];
     
     for (const table of tablesToMigrate) {
       // 1. Agregar columna tenant_id
@@ -227,6 +237,33 @@ async function initDatabase() {
         END $$;
       `);
     }
+
+    // 8. Crear función SECURITY DEFINER para lookup de usuarios sin RLS (utilizada en login global)
+    await client.query(`
+      CREATE OR REPLACE FUNCTION get_user_by_email(p_email VARCHAR)
+      RETURNS TABLE (
+        id VARCHAR,
+        name VARCHAR,
+        email VARCHAR,
+        password VARCHAR,
+        role VARCHAR,
+        status VARCHAR,
+        tenant_id VARCHAR
+      ) 
+      SECURITY DEFINER
+      AS $$
+      BEGIN
+        RETURN QUERY 
+        SELECT u.id, u.name, u.email, u.password, u.role, u.status, u.tenant_id
+        FROM usuarios u
+        WHERE u.email = p_email;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+
+    await client.query(`
+      GRANT EXECUTE ON FUNCTION get_user_by_email(VARCHAR) TO pos_app_user;
+    `);
 
     console.log('✅ Base de datos inicializada con RLS y soporte SaaS.');
   } catch (err: any) {
