@@ -86,7 +86,7 @@ function Sidebar({ page, onNav, slim, onToggle }: { page: Page; onNav: (p: Page)
         })}
       </nav>
       <div className={`px-2 py-3 border-t border-[#E2E8F0] ${slim ? "flex justify-center" : ""}`}>
-        <button onClick={logout} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#DC2626] hover:bg-red-50 transition-all w-full ${slim ? "justify-center" : ""}`}>
+        <button onClick={async () => { await logout(); window.location.href = "/"; }} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#DC2626] hover:bg-red-50 transition-all w-full ${slim ? "justify-center" : ""}`}>
           <LogOut size={14} />
           {!slim && "Cerrar sesión"}
         </button>
@@ -752,7 +752,7 @@ export default function App({ tenantId }: { tenantId?: string }) {
             <Btn v="primary" sz="lg" full onClick={() => toast.info('Integración de pasarela de pago en progreso')}>
               Actualizar plan de pago
             </Btn>
-            <Btn v="ghost" sz="sm" full onClick={() => { usePOSStore.getState().logout(); setPage('login'); }}>
+            <Btn v="ghost" sz="sm" full onClick={async () => { await usePOSStore.getState().logout(); window.location.href = "/"; }}>
               Cerrar sesión
             </Btn>
           </div>

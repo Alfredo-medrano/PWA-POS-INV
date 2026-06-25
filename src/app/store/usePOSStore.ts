@@ -180,7 +180,7 @@ interface POSState {
   saveConfig: (cfg: BusinessConfig) => Promise<boolean>;
   login: (email: string, password: string, tenantId?: string) => Promise<boolean>;
   globalLogin: (email: string, password: string) => Promise<{ success: boolean; tenantSlug?: string; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   register: (name: string, email: string, password: string, tenantId?: string) => Promise<boolean>;
   forgotPassword: (email: string, tenantId?: string) => Promise<string | null>;
   
@@ -454,7 +454,12 @@ export const usePOSStore = create<POSState>()(
     }
   },
 
-  logout: () => {
+  logout: async () => {
+    try {
+      await axios.post('/api/auth/logout');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
     set({ user: null });
     localStorage.removeItem('pos_user');
   },
