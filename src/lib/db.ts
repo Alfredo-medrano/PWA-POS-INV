@@ -229,8 +229,12 @@ async function initDatabase() {
     }
 
     console.log('✅ Base de datos inicializada con RLS y soporte SaaS.');
-  } catch (err) {
-    console.error('❌ Error inicializando base de datos:', err);
+  } catch (err: any) {
+    if (err.code === '42501') {
+      console.log('ℹ️ Conexión de base de datos en modo lectura/escritura (sin privilegios de alteración de esquema/DDL). Omitiendo inicialización de tablas.');
+    } else {
+      console.error('❌ Error inicializando base de datos:', err);
+    }
   } finally {
     client.release();
   }
