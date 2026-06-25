@@ -26,7 +26,7 @@ import { usePOSStore } from "./store/usePOSStore";
 import { DTEPill, Btn, Input, Badge } from "./components/Primitives";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Page = "login" | "setup" | "dashboard" | "pos" | "inventario" | "productos" | "compras" | "clientes" | "reportes" | "configuracion";
+type Page = "login" | "setup" | "dashboard" | "pos" | "inventario" | "productos" | "compras" | "clientes" | "reportes" | "configuracion" | "notFound" | "trialExpired";
 
 export function hasAccess(role: string, page: Page): boolean {
   if (role === "Administrador") return true;
@@ -201,7 +201,7 @@ function Layout({ page, onNav, children, dte, slim, onSlim }: {
 }
 
 // ─── Login Component ──────────────────────────────────────────────────────────
-function Login({ onLogin }: { onLogin: () => void }) {
+function Login({ onLogin, tenantId }: { onLogin: () => void; tenantId?: string }) {
   const login = usePOSStore(state => state.login);
   const register = usePOSStore(state => state.register);
   const forgotPassword = usePOSStore(state => state.forgotPassword);
@@ -219,7 +219,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
   async function handleLogin() {
     setLoading(true);
     setError(null);
-    const ok = await login(email, pw);
+    const ok = await login(email, pw, tenantId);
     setLoading(false);
     if (ok) {
       toast.success("¡Sesión iniciada con éxito!");
@@ -254,7 +254,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setLoading(true);
     setError(null);
     setTempPassword(null);
-    const temp = await forgotPassword(email);
+    const temp = await forgotPassword(email, tenantId);
     setLoading(false);
     if (temp) {
       setTempPassword(temp);
@@ -611,7 +611,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
 }
 
 // ─── Main App Component ────────────────────────────────────────────────────────
-export default function App() {
+export default function App({ tenantId }: { tenantId?: string }) {
   const { user, config, fetchConfig, fetchSetupStatus, setupStatus } = usePOSStore();
   const [page, setPage] = useState<Page>("login");
   const [slim, setSlim] = useState(false);
@@ -620,26 +620,33 @@ export default function App() {
 
   useEffect(() => {
     async function init() {
-      const isSetupOk = await fetchSetupStatus();
-      if (!isSetupOk) {
-        setPage("setup");
+      if (!tenantId) {
+        setPage("login");
+        setLoading(false);
+        return;
+      }
+
+      // Cargar configuración de este tenant en particular
+      const hasConfig = await fetchConfig(tenantId);
+      
+      if (!hasConfig) {
+        // Tenant no existe
+        setPage("notFound");
       } else {
-        const hasConfig = await fetchConfig();
-        if (user) {
-          if (hasConfig) {
-            setPage("dashboard");
-            const currentStoreConfig = usePOSStore.getState().config;
-            if (currentStoreConfig?.dteUrl) {
-              try {
-                const res = await axios.get(`${currentStoreConfig.dteUrl}/api/dte/status`);
-                setDteConnected(res.status === 200);
-              } catch (err) {
-                console.error("DTE initial connection check failed:", err);
-                setDteConnected(false);
-              }
+        const currentStoreConfig = usePOSStore.getState().config;
+        
+        if (currentStoreConfig?.trialExpired || currentStoreConfig?.tenantStatus === 'suspended') {
+          setPage("trialExpired");
+        } else if (user && user.tenantId === tenantId) {
+          setPage("dashboard");
+          if (currentStoreConfig?.dteUrl) {
+            try {
+              const res = await axios.get(`${currentStoreConfig.dteUrl}/api/dte/status`);
+              setDteConnected(res.status === 200);
+            } catch (err) {
+              console.error("DTE connection failed:", err);
+              setDteConnected(false);
             }
-          } else {
-            setPage("setup");
           }
         } else {
           setPage("login");
@@ -648,7 +655,7 @@ export default function App() {
       setLoading(false);
     }
     init();
-  }, [user]);
+  }, [user, tenantId]);
 
   useEffect(() => {
     if (user && page !== "login" && page !== "setup" && !hasAccess(user.role, page)) {
@@ -679,12 +686,13 @@ export default function App() {
   if (page === "login") {
     return (
       <Login 
+        tenantId={tenantId}
         onLogin={async () => {
-          const hasConfig = await fetchConfig();
+          const hasConfig = await fetchConfig(tenantId);
           if (hasConfig) {
             setPage("dashboard");
           } else {
-            setPage("setup");
+            setPage("dashboard");
           }
         }} 
       />
@@ -698,6 +706,58 @@ export default function App() {
           setPage("dashboard");
         }} 
       />
+    );
+  }
+
+  if (page === "notFound") {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <div className="w-full max-w-md text-center bg-white border border-[#E2E8F0] shadow-xl rounded-3xl p-8 space-y-6">
+          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto border border-red-100">
+            <Building2 size={32} />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-black text-[#0F172A]">Negocio no encontrado</h1>
+            <p className="text-sm text-[#64748B] leading-relaxed">
+              El negocio con identificador <span className="font-mono font-bold text-[#1B4FD8]">"{tenantId}"</span> no está registrado en nuestra plataforma SaaS.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Btn v="primary" sz="lg" full onClick={() => window.location.href = '/register'}>
+              Registrar un nuevo negocio →
+            </Btn>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (page === "trialExpired") {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <div className="w-full max-w-md text-center bg-white border border-[#E2E8F0] shadow-xl rounded-3xl p-8 space-y-6">
+          <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto border border-amber-100">
+            <Clock size={32} className="animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-black text-[#0F172A]">Prueba demo expirada</h1>
+            <p className="text-sm text-[#64748B] leading-relaxed">
+              La prueba gratuita de 15 días para <span className="font-semibold text-[#0F172A]">{config?.bizName || tenantId}</span> ha expirado o tu cuenta ha sido suspendida.
+            </p>
+            <p className="text-xs text-[#94A3B8] font-medium">
+              Por favor contacta al administrador del sistema o actualiza tu suscripción a un plan para continuar utilizando el punto de venta.
+            </p>
+          </div>
+          <div className="pt-2 space-y-2">
+            <Btn v="primary" sz="lg" full onClick={() => toast.info('Integración de pasarela de pago en progreso')}>
+              Actualizar plan de pago
+            </Btn>
+            <Btn v="ghost" sz="sm" full onClick={() => { usePOSStore.getState().logout(); setPage('login'); }}>
+              Cerrar sesión
+            </Btn>
+          </div>
+        </div>
+      </div>
     );
   }
 

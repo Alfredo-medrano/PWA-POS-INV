@@ -1,11 +1,12 @@
 import { Pool } from 'pg';
-
-let pool: Pool;
+import { getTenantId } from './tenant';
 
 const connectionString = process.env.DATABASE_URL;
 
+let rawPool: Pool;
+
 if (process.env.NODE_ENV === 'production') {
-  pool = new Pool({
+  rawPool = new Pool({
     connectionString,
     ssl: {
       rejectUnauthorized: false,
@@ -20,15 +21,35 @@ if (process.env.NODE_ENV === 'production') {
       },
     });
   }
-  pool = (global as any).pool;
+  rawPool = (global as any).pool;
 }
 
-// Inicializar tablas e incorporar columnas nuevas
+// Inicializar tablas e incorporar columnas nuevas con multitenancy y RLS
 async function initDatabase() {
-  const client = await pool.connect();
+  const client = await rawPool.connect();
   try {
-    console.log('🔄 Verificando e inicializando tablas en Neon...');
+    console.log('🔄 Verificando e inicializando tablas en Neon con soporte SaaS...');
     
+    // 0. Crear tabla de Tenants
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tenants (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(100) UNIQUE NOT NULL,
+        plan VARCHAR(50) NOT NULL DEFAULT 'demo',
+        status VARCHAR(50) NOT NULL DEFAULT 'active',
+        trial_ends_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Inserción de inquilino inicial por defecto para compatibilidad
+    await client.query(`
+      INSERT INTO tenants (id, name, slug, plan, status, trial_ends_at)
+      VALUES ('single', 'Negocio Inicial', 'inicial', 'demo', 'active', NOW() + INTERVAL '15 days')
+      ON CONFLICT (id) DO NOTHING
+    `);
+
     // 1. Productos
     await client.query(`
       CREATE TABLE IF NOT EXISTS productos (
@@ -46,7 +67,6 @@ async function initDatabase() {
       )
     `);
 
-    // Migración: agregar barcode si no existe
     await client.query(`
       DO $$ BEGIN
         ALTER TABLE productos ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);
@@ -71,7 +91,6 @@ async function initDatabase() {
       )
     `);
 
-    // Migración: agregar address si no existe
     await client.query(`
       DO $$ BEGIN
         ALTER TABLE clientes ADD COLUMN IF NOT EXISTS address TEXT;
@@ -164,7 +183,52 @@ async function initDatabase() {
       )
     `);
 
-    console.log('✅ Base de datos inicializada/actualizada.');
+    // --- MIGRACIÓN MULTITENANT ---
+    const tablesToMigrate = ['productos', 'clientes', 'ventas', 'configuracion', 'usuarios', 'proveedores', 'compras'];
+    
+    for (const table of tablesToMigrate) {
+      // 1. Agregar columna tenant_id
+      await client.query(`
+        ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(36);
+      `);
+      
+      // 2. Mapear datos antiguos/existentes al tenant por defecto 'single'
+      await client.query(`
+        UPDATE ${table} SET tenant_id = 'single' WHERE tenant_id IS NULL;
+      `);
+      
+      // 3. Forzar restricción NOT NULL y valor DEFAULT automático basado en RLS
+      await client.query(`
+        ALTER TABLE ${table} ALTER COLUMN tenant_id SET DEFAULT current_setting('app.current_tenant_id', true);
+        ALTER TABLE ${table} ALTER COLUMN tenant_id SET NOT NULL;
+      `);
+
+      // 4. Agregar constraint de Foreign Key
+      await client.query(`
+        DO $$ BEGIN
+          ALTER TABLE ${table} ADD CONSTRAINT fk_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END $$;
+      `);
+
+      // 5. Habilitar RLS y forzarlo
+      await client.query(`
+        ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE ${table} FORCE ROW LEVEL SECURITY;
+      `);
+
+      // 6. Configurar política de aislamiento
+      await client.query(`
+        DO $$ BEGIN
+          DROP POLICY IF EXISTS tenant_isolation_policy ON ${table};
+          CREATE POLICY tenant_isolation_policy ON ${table}
+            USING (tenant_id = current_setting('app.current_tenant_id', true));
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END $$;
+      `);
+    }
+
+    console.log('✅ Base de datos inicializada con RLS y soporte SaaS.');
   } catch (err) {
     console.error('❌ Error inicializando base de datos:', err);
   } finally {
@@ -174,5 +238,60 @@ async function initDatabase() {
 
 // Ejecutar migración de forma asíncrona sin bloquear la importación
 initDatabase().catch(err => console.error("Error al iniciar DB:", err));
+
+// Crear Proxy sobre rawPool para inyectar automáticamente el tenant_id en RLS
+const pool = new Proxy(rawPool, {
+  get(target, prop, receiver) {
+    if (prop === 'query') {
+      return async function(text: any, params?: any[]) {
+        const tenantId = getTenantId();
+        if (tenantId) {
+          const client = await target.connect();
+          try {
+            await client.query('BEGIN');
+            await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+            const result = await client.query(text, params);
+            await client.query('COMMIT');
+            return result;
+          } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+          } finally {
+            client.release();
+          }
+        } else {
+          return target.query(text, params);
+        }
+      };
+    }
+    if (prop === 'connect') {
+      return async function() {
+        const client = await target.connect();
+        const originalQuery = client.query;
+        
+        // Envolver el query del cliente para inyectar el tenant_id cuando comience una transacción
+        client.query = async function(text: any, params?: any[]) {
+          const normalizedText = typeof text === 'string' ? text.trim().toUpperCase() : '';
+          if (normalizedText === 'BEGIN') {
+            const res = await originalQuery.call(this, text, params);
+            const tenantId = getTenantId();
+            if (tenantId) {
+              await originalQuery.call(this, `SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+            }
+            return res;
+          }
+          return originalQuery.call(this, text, params);
+        } as any;
+        
+        return client;
+      };
+    }
+    const val = Reflect.get(target, prop, receiver);
+    if (typeof val === 'function') {
+      return val.bind(target);
+    }
+    return val;
+  }
+}) as unknown as Pool;
 
 export default pool;

@@ -1,11 +1,44 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { runWithTenant } from '@/lib/tenant';
+import crypto from 'crypto';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const result = await pool.query('SELECT * FROM configuracion LIMIT 1');
+    const { searchParams } = new URL(request.url);
+    const queryTenantId = searchParams.get('tenantId');
+
+    let trialExpired = false;
+    let tenantStatus = 'active';
+    let resolvedTenantId = queryTenantId;
+
+    if (queryTenantId) {
+      // Buscar tenant por id o por slug
+      const tenantRes = await pool.query('SELECT id, plan, status, trial_ends_at FROM tenants WHERE id = $1 OR slug = $1', [queryTenantId]);
+      if (tenantRes.rowCount === 0) {
+        return NextResponse.json({ error: 'Negocio no encontrado' }, { status: 404 });
+      }
+      const tenant = tenantRes.rows[0];
+      resolvedTenantId = tenant.id;
+      tenantStatus = tenant.status;
+      if (tenant.plan === 'demo' && new Date(tenant.trial_ends_at) < new Date()) {
+        trialExpired = true;
+      }
+    }
+
+    const queryFn = () => pool.query('SELECT * FROM configuracion LIMIT 1');
+
+    // Ejecutar consulta bajo el contexto del tenant
+    const result = resolvedTenantId 
+      ? await runWithTenant(resolvedTenantId, queryFn)
+      : await queryFn();
+
     if (result.rowCount === 0) {
-      return NextResponse.json({});
+      return NextResponse.json({ 
+        bizName: 'Configuración pendiente',
+        trialExpired,
+        tenantStatus
+      });
     }
     const r = result.rows[0];
     return NextResponse.json({
@@ -15,7 +48,9 @@ export async function GET() {
       bizAddress: r.biz_address,
       dteUrl: r.dte_url,
       dteKey: r.dte_key,
-      aperturaCaja: parseFloat(r.apertura_caja) || 200.00
+      aperturaCaja: parseFloat(r.apertura_caja) || 200.00,
+      trialExpired,
+      tenantStatus
     });
   } catch (err) {
     console.error(err);
@@ -38,7 +73,7 @@ export async function POST(request: Request) {
       `, [bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, dteKey || null, parseFloat(aperturaCaja) || 200.00, id]);
       return NextResponse.json({ success: true, message: 'Configuración actualizada' });
     } else {
-      const id = 'single';
+      const id = crypto.randomUUID();
       await pool.query(`
         INSERT INTO configuracion (id, biz_name, biz_type, biz_phone, biz_address, dte_url, dte_key, apertura_caja)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

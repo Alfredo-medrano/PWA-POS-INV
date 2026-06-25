@@ -71,6 +71,8 @@ export interface BusinessConfig {
   dteUrl?: string;
   dteKey?: string;
   aperturaCaja?: number;
+  trialExpired?: boolean;
+  tenantStatus?: string;
 }
 
 export interface Sale {
@@ -170,12 +172,12 @@ interface POSState {
   processSale: () => Promise<boolean>;
 
   // Nuevas Acciones
-  fetchConfig: () => Promise<boolean>;
+  fetchConfig: (tenantId?: string) => Promise<boolean>;
   saveConfig: (cfg: BusinessConfig) => Promise<boolean>;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string, tenantId?: string) => Promise<boolean>;
   logout: () => void;
   register: (name: string, email: string, password: string) => Promise<boolean>;
-  forgotPassword: (email: string) => Promise<string | null>;
+  forgotPassword: (email: string, tenantId?: string) => Promise<string | null>;
   
   fetchUsers: () => Promise<void>;
   createUser: (usr: Omit<User, 'id'> & { password?: string }) => Promise<boolean>;
@@ -391,9 +393,10 @@ export const usePOSStore = create<POSState>()(
   },
 
   // Configuración
-  fetchConfig: async () => {
+  fetchConfig: async (tenantId) => {
     try {
-      const res = await axios.get('/api/configuracion');
+      const url = tenantId ? `/api/configuracion?tenantId=${tenantId}` : '/api/configuracion';
+      const res = await axios.get(url);
       if (res.data && res.data.bizName) {
         set({ config: res.data });
         return true;
@@ -418,9 +421,9 @@ export const usePOSStore = create<POSState>()(
   },
 
   // Autenticación
-  login: async (email, password) => {
+  login: async (email, password, tenantId) => {
     try {
-      const res = await axios.post('/api/auth/login', { email, password });
+      const res = await axios.post('/api/auth/login', { email, password, tenantId });
       set({ user: res.data });
       localStorage.setItem('pos_user', JSON.stringify(res.data));
       return true;
@@ -450,9 +453,9 @@ export const usePOSStore = create<POSState>()(
     }
   },
 
-  forgotPassword: async (email) => {
+  forgotPassword: async (email, tenantId) => {
     try {
-      const res = await axios.post('/api/auth/forgot-password', { email });
+      const res = await axios.post('/api/auth/forgot-password', { email, tenantId });
       if (res.data && res.data.success) {
         return res.data.tempPassword;
       }
