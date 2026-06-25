@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import crypto from 'crypto';
+import { requireRole } from '@/lib/auth';
+
+function handleAuthError(err: any) {
+  if (err.message === 'UNAUTHORIZED') {
+    return NextResponse.json({ error: 'No autorizado. Por favor inicia sesión.' }, { status: 401 });
+  }
+  if (err.message === 'FORBIDDEN') {
+    return NextResponse.json({ error: 'Acceso denegado. Permisos insuficientes.' }, { status: 403 });
+  }
+  return null;
+}
 
 export async function GET() {
   try {
+    await requireRole(['Administrador', 'Cajero']);
     const result = await pool.query('SELECT * FROM clientes ORDER BY name ASC');
     const clis = result.rows.map(r => ({
       id: r.id,
@@ -19,7 +31,9 @@ export async function GET() {
       lastBuy: r.last_buy
     }));
     return NextResponse.json(clis);
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al obtener clientes' }, { status: 500 });
   }
@@ -27,6 +41,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    await requireRole(['Administrador', 'Cajero']);
     const body = await request.json();
     const { name, type, nit, nrc, dui, phone, email, address } = body;
     const id = crypto.randomUUID();
@@ -37,8 +52,11 @@ export async function POST(request: Request) {
     `, [id, name, type || 'natural', nit || null, nrc || null, dui || null, phone || null, email || null, address || null]);
     
     return NextResponse.json({ id, name, type, nit, nrc, dui, phone, email, address, total: 0, lastBuy: null }, { status: 201 });
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al crear cliente' }, { status: 500 });
   }
 }
+

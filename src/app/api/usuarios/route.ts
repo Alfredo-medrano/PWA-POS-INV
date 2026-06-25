@@ -2,12 +2,26 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { requireRole } from '@/lib/auth';
+
+function handleAuthError(err: any) {
+  if (err.message === 'UNAUTHORIZED') {
+    return NextResponse.json({ error: 'No autorizado. Por favor inicia sesión.' }, { status: 401 });
+  }
+  if (err.message === 'FORBIDDEN') {
+    return NextResponse.json({ error: 'Acceso denegado. Permisos insuficientes.' }, { status: 403 });
+  }
+  return null;
+}
 
 export async function GET() {
   try {
+    await requireRole(['Administrador']);
     const result = await pool.query('SELECT id, name, email, role, status FROM usuarios ORDER BY name ASC');
     return NextResponse.json(result.rows);
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al obtener usuarios' }, { status: 500 });
   }
@@ -15,6 +29,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    await requireRole(['Administrador']);
     const body = await request.json();
     const { name, email, password, role, status } = body;
     const id = crypto.randomUUID();
@@ -27,6 +42,8 @@ export async function POST(request: Request) {
     
     return NextResponse.json({ id, name, email, role, status }, { status: 201 });
   } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     if (err.code === '23505') {
       return NextResponse.json({ error: 'El correo electrónico ya está en uso' }, { status: 400 });
@@ -35,3 +52,4 @@ export async function POST(request: Request) {
     }
   }
 }
+

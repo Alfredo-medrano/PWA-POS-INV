@@ -1,8 +1,20 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireRole } from '@/lib/auth';
+
+function handleAuthError(err: any) {
+  if (err.message === 'UNAUTHORIZED') {
+    return NextResponse.json({ error: 'No autorizado. Por favor inicia sesión.' }, { status: 401 });
+  }
+  if (err.message === 'FORBIDDEN') {
+    return NextResponse.json({ error: 'Acceso denegado. Permisos insuficientes.' }, { status: 403 });
+  }
+  return null;
+}
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
+    await requireRole(['Administrador', 'Cajero']);
     const { id } = params;
     const body = await request.json();
     const { name, type, nit, nrc, dui, phone, email, address } = body;
@@ -18,7 +30,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
     }
     return NextResponse.json({ id, name, type, nit, nrc, dui, phone, email, address });
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al actualizar cliente' }, { status: 500 });
   }
@@ -26,14 +40,18 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
+    await requireRole(['Administrador']);
     const { id } = params;
     const result = await pool.query('DELETE FROM clientes WHERE id = $1', [id]);
     if (result.rowCount === 0) {
       return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
     }
     return NextResponse.json({ message: 'Cliente eliminado' });
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al eliminar cliente' }, { status: 500 });
   }
 }
+
