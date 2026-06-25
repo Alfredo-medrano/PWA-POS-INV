@@ -39,10 +39,12 @@ export async function POST(request: Request) {
       pool.query('UPDATE usuarios SET password = $1 WHERE id = $2', [hashedTemp, u.id])
     );
 
+    // Loggear la contraseña temporal de forma segura en el servidor (para simular envío de correo en desarrollo)
+    console.log(`🔑 [PASSWORD RESET] Tenant ID: ${resolvedTenantId}, Email: ${email}, Temp Password: ${rawTempPassword}`);
+
     return NextResponse.json({
       success: true,
-      message: 'Contraseña restablecida con éxito.',
-      tempPassword: rawTempPassword
+      message: 'Si el correo electrónico está registrado en el sistema, recibirás una contraseña temporal en breve.'
     });
   } catch (err) {
     console.error(err);

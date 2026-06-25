@@ -254,13 +254,13 @@ function Login({ onLogin, tenantId }: { onLogin: () => void; tenantId?: string }
     setLoading(true);
     setError(null);
     setTempPassword(null);
-    const temp = await forgotPassword(email, tenantId);
+    const ok = await forgotPassword(email, tenantId);
     setLoading(false);
-    if (temp) {
-      setTempPassword(temp);
-      toast.success("Contraseña restablecida con éxito.");
+    if (ok) {
+      setTempPassword("Revisa la consola del servidor (Server Logs) para ver la contraseña temporal.");
+      toast.success("Solicitud procesada con éxito.");
     } else {
-      setError("No se encontró ningún usuario con ese correo electrónico.");
+      setError("No se encontró ningún usuario con ese correo electrónico o la empresa no es válida.");
     }
   }
 
