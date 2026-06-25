@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { cookies } from 'next/headers';
+import { verifySession } from './auth-crypto';
 
 // Storage para fijar manualmente el tenant_id en procesos o llamadas específicas
 const tenantStorage = new AsyncLocalStorage<string>();
@@ -27,8 +28,8 @@ export function getTenantId(): string | undefined {
     const cookieStore = cookies();
     const sessionCookie = cookieStore.get('pos_session');
     if (sessionCookie && sessionCookie.value) {
-      const session = JSON.parse(sessionCookie.value);
-      return session.tenantId || undefined;
+      const session = verifySession(sessionCookie.value);
+      return session?.tenantId || undefined;
     }
   } catch (e) {
     // Fuera del contexto de solicitud HTTP (ej. durante compilación o scripts)

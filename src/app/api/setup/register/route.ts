@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { runWithTenant } from '@/lib/tenant';
+import { signSession } from '@/lib/auth-crypto';
 
 export async function POST(request: Request) {
   try {
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
         }
       }, { status: 201 });
 
-      response.cookies.set('pos_session', JSON.stringify({ id: adminId, role: 'Administrador', tenantId }), {
+      response.cookies.set('pos_session', signSession({ id: adminId, role: 'Administrador', tenantId }), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',

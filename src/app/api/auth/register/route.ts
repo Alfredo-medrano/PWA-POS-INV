@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { runWithTenant } from '@/lib/tenant';
+import { signSession } from '@/lib/auth-crypto';
 
 export async function POST(request: Request) {
   try {
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     
     const response = NextResponse.json({ success: true, user: userPayload }, { status: 201 });
     
-    response.cookies.set('pos_session', JSON.stringify({ id, role: 'Cajero', tenantId: resolvedTenantId }), {
+    response.cookies.set('pos_session', signSession({ id, role: 'Cajero', tenantId: resolvedTenantId }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

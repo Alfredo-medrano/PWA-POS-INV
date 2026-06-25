@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { signSession } from '@/lib/auth-crypto';
+
 
 export async function POST(request: Request) {
   try {
@@ -60,8 +62,8 @@ export async function POST(request: Request) {
       tenantStatus: tenant.status
     });
 
-    // Guardar sesión en cookies
-    response.cookies.set('pos_session', JSON.stringify({ id: u.id, role: u.role, tenantId: u.tenant_id }), {
+    // Guardar sesión en cookies de forma firmada criptográficamente
+    response.cookies.set('pos_session', signSession({ id: u.id, role: u.role, tenantId: u.tenant_id }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

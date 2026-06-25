@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { verifySession } from '@/lib/auth-crypto';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -16,10 +17,19 @@ export function middleware(request: NextRequest) {
       (pathname === '/api/configuracion' && method === 'GET');
 
     if (!isPublic) {
-      const session = request.cookies.get('pos_session');
-      if (!session || !session.value) {
+      const sessionCookie = request.cookies.get('pos_session');
+      if (!sessionCookie || !sessionCookie.value) {
         return NextResponse.json(
           { error: 'No autorizado. Por favor inicia sesión.' },
+          { status: 401 }
+        );
+      }
+
+      // Validar la firma criptográfica de la sesión
+      const verified = verifySession(sessionCookie.value);
+      if (!verified) {
+        return NextResponse.json(
+          { error: 'Sesión inválida o expirada. Por favor inicia sesión.' },
           { status: 401 }
         );
       }
@@ -32,3 +42,4 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/api/:path*'],
 };
+
