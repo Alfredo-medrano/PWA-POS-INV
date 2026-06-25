@@ -176,6 +176,7 @@ interface POSState {
   fetchConfig: (tenantId?: string) => Promise<boolean>;
   saveConfig: (cfg: BusinessConfig) => Promise<boolean>;
   login: (email: string, password: string, tenantId?: string) => Promise<boolean>;
+  globalLogin: (email: string, password: string) => Promise<{ success: boolean; tenantSlug?: string; error?: string }>;
   logout: () => void;
   register: (name: string, email: string, password: string) => Promise<boolean>;
   forgotPassword: (email: string, tenantId?: string) => Promise<string | null>;
@@ -431,6 +432,22 @@ export const usePOSStore = create<POSState>()(
     } catch (err) {
       console.error(err);
       return false;
+    }
+  },
+
+  globalLogin: async (email, password) => {
+    try {
+      const res = await axios.post('/api/auth/global-login', { email, password });
+      if (res.data && res.data.success) {
+        set({ user: res.data.user });
+        localStorage.setItem('pos_user', JSON.stringify(res.data.user));
+        return { success: true, tenantSlug: res.data.tenantSlug };
+      }
+      return { success: false, error: 'Credenciales inválidas' };
+    } catch (err: any) {
+      console.error(err);
+      const errMsg = err.response?.data?.error || 'Error en inicio de sesión';
+      return { success: false, error: errMsg };
     }
   },
 

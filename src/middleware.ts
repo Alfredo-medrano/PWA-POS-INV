@@ -9,6 +9,7 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith('/api')) {
     const isPublic =
       pathname === '/api/auth/login' ||
+      pathname === '/api/auth/global-login' ||
       pathname === '/api/auth/forgot-password' ||
       pathname === '/api/setup/status' ||
       pathname === '/api/setup/register' ||

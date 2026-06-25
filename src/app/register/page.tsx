@@ -174,6 +174,12 @@ export default function RegisterTenantPage() {
                 {testing ? <><RefreshCw size={13} className="animate-spin" />Probando conexión…</> : <><Activity size={13} />Probar conexión</>}
               </Btn>
               {ok && <div className="flex items-center gap-2.5 bg-emerald-50 text-emerald-700 p-3.5 rounded-xl text-sm font-semibold ring-1 ring-emerald-200"><CheckCircle size={16} />Conexión exitosa — Emisor validado correctamente</div>}
+              
+              <div className="pt-2 text-center">
+                <button type="button" onClick={() => { setUrl(''); setKey(''); setStep(4); }} className="text-sm font-bold text-[#1B4FD8] hover:underline cursor-pointer">
+                  Omitir este paso por ahora
+                </button>
+              </div>
             </div>
           )}
           {step === 4 && (
@@ -210,6 +216,14 @@ export default function RegisterTenantPage() {
             <Btn v="primary" onClick={() => setStep(s => s + 1)} disabled={(step === 1 && !biz) || (step === 2 && (!adminName || !adminEmail || !adminPassword))}>Siguiente</Btn>
           </div>
         )}
+        <div className="mt-6 text-center">
+          <p className="text-sm text-[#64748B]">
+            ¿Ya tienes un negocio registrado?{" "}
+            <button onClick={() => router.push("/")} className="text-[#1B4FD8] font-bold hover:underline cursor-pointer">
+              Iniciar sesión aquí
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   );
