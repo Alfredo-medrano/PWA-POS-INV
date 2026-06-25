@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     });
 
     // Guardar sesión en cookies de forma firmada criptográficamente
-    response.cookies.set('pos_session', signSession({ id: u.id, role: u.role, tenantId: u.tenant_id }), {
+    response.cookies.set('pos_session', await signSession({ id: u.id, role: u.role, tenantId: u.tenant_id }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

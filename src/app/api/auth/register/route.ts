@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     
     const response = NextResponse.json({ success: true, user: userPayload }, { status: 201 });
     
-    response.cookies.set('pos_session', signSession({ id, role: 'Cajero', tenantId: resolvedTenantId }), {
+    response.cookies.set('pos_session', await signSession({ id, role: 'Cajero', tenantId: resolvedTenantId }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

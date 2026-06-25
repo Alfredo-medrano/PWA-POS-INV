@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { headers } from 'next/headers';
 import { verifySession, signSession, SessionData } from './auth-crypto';
 
 export type { SessionData };
@@ -7,15 +7,17 @@ export { verifySession, signSession };
 // Retrieve verified session in server context (Server components/API routes)
 export function getSession(): SessionData | null {
   try {
-    const cookieStore = cookies();
-    const sessionCookie = cookieStore.get('pos_session');
-    if (!sessionCookie || !sessionCookie.value) {
-      return null;
+    const headerStore = headers();
+    const id = headerStore.get('x-user-id');
+    const role = headerStore.get('x-user-role');
+    const tenantId = headerStore.get('x-tenant-id');
+    if (id && role && tenantId) {
+      return { id, role, tenantId };
     }
-    return verifySession(sessionCookie.value);
   } catch (e) {
-    return null;
+    // Fuera del contexto de solicitud HTTP
   }
+  return null;
 }
 
 // Validate session and role in API routes (Server-side RBAC)

@@ -130,7 +130,7 @@ export async function POST(request: Request) {
         }
       }, { status: 201 });
 
-      response.cookies.set('pos_session', signSession({ id: adminId, role: 'Administrador', tenantId }), {
+      response.cookies.set('pos_session', await signSession({ id: adminId, role: 'Administrador', tenantId }), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
