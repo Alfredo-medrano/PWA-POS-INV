@@ -12,8 +12,8 @@ export async function POST(request: Request) {
     }
 
     // Buscar al usuario de manera global (sin RLS activo para poder resolver el tenant)
-    // Usamos pool directamente que en ausencia de tenantId en las cookies no inyectará RLS
-    const result = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+    // Usamos get_user_by_email que corre con SECURITY DEFINER y evita restricciones RLS
+    const result = await pool.query('SELECT * FROM get_user_by_email($1)', [email]);
     if (result.rowCount === 0) {
       return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 });
     }

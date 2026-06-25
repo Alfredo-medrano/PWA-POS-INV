@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     const resolvedTenantSlug = tenantRes.rows[0].slug;
 
     // Check if email already exists
-    const checkUser = await pool.query('SELECT id FROM usuarios WHERE email = $1', [email]);
+    const checkUser = await pool.query('SELECT id FROM get_user_by_email($1)', [email]);
     if (checkUser.rowCount > 0) {
       return NextResponse.json({ error: 'El correo electrónico ya está registrado' }, { status: 400 });
     }
