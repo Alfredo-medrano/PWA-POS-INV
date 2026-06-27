@@ -205,6 +205,23 @@ async function initDatabase() {
       )
     `);
 
+    // Add Foreign Key constraint if not present
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'fk_password_reset_user'
+        ) THEN
+          ALTER TABLE password_reset_tokens 
+          ADD CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `);
+
+    // Create index on token_hash if it does not exist
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens (token_hash);
+    `);
+
     // --- MIGRACIÓN MULTITENANT ---
     const tablesToMigrate = ['productos', 'clientes', 'ventas', 'configuracion', 'usuarios', 'proveedores', 'compras', 'egresos', 'password_reset_tokens'];
     

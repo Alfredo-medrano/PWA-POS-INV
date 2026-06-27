@@ -3,9 +3,27 @@ import pool from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { runWithTenant } from '@/lib/tenant';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+
+// NB-03: 10 reset confirmation attempts per IP every 1 hour
+const RESET_CONFIRM_MAX_ATTEMPTS = 10;
+const RESET_CONFIRM_WINDOW_MS = 60 * 60 * 1000;
 
 export async function POST(request: Request) {
   try {
+    // NB-03 Rate Limit Check
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(`reset-confirm:${ip}`, RESET_CONFIRM_MAX_ATTEMPTS, RESET_CONFIRM_WINDOW_MS);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Intenta de nuevo más tarde.' },
+        { 
+          status: 429,
+          headers: { 'Retry-After': String(rateLimit.retryAfter) }
+        }
+      );
+    }
+
     const body = await request.json();
     const { token, password, tenantId } = body;
 
@@ -63,10 +81,20 @@ export async function POST(request: Request) {
     // Hash the new password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Update password and mark token as used (atomic)
+    // NB-02: Update password and mark token as used atomically inside a transaction
     await runWithTenant(resolvedTenantId, async () => {
-      await pool.query('UPDATE usuarios SET password = $1 WHERE id = $2', [hashedPassword, tokenRecord.user_id]);
-      await pool.query('UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1', [tokenRecord.id]);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('UPDATE usuarios SET password = $1 WHERE id = $2', [hashedPassword, tokenRecord.user_id]);
+        await client.query('UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1', [tokenRecord.id]);
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
     });
 
     return NextResponse.json({

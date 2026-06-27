@@ -71,13 +71,12 @@ export function checkRateLimit(
     store.set(key, { count: 1, resetAt: now + windowMs });
     return { allowed: true, remaining: maxAttempts - 1, retryAfter: 0 };
   }
-
   // Within window — check if under limit
   entry.count += 1;
   const remaining = Math.max(0, maxAttempts - entry.count);
   const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
 
-  if (entry.count > maxAttempts) {
+  if (entry.count >= maxAttempts) {
     return { allowed: false, remaining: 0, retryAfter };
   }
 
