@@ -22,11 +22,11 @@ function ensureCleanupTimer() {
   if (cleanupTimer) return;
   cleanupTimer = setInterval(() => {
     const now = Date.now();
-    for (const [key, entry] of store.entries()) {
+    store.forEach((entry, key) => {
       if (now >= entry.resetAt) {
         store.delete(key);
       }
-    }
+    });
     // Stop the timer if the store is empty to avoid keeping the process alive
     if (store.size === 0 && cleanupTimer) {
       clearInterval(cleanupTimer);
