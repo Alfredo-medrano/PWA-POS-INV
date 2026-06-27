@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { runWithTenant } from '@/lib/tenant';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { getResetToken, consumeResetToken } from '@/lib/reset-tokens';
 
 // NB-03: 10 reset confirmation attempts per IP every 1 hour
 const RESET_CONFIRM_MAX_ATTEMPTS = 10;
@@ -51,29 +52,12 @@ export async function POST(request: Request) {
     // Hash the incoming token to compare against the stored hash
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    // Find the token record within the tenant context
-    const tokenRes = await runWithTenant(resolvedTenantId, () =>
-      pool.query(
-        `SELECT id, user_id, expires_at, used_at 
-         FROM password_reset_tokens 
-         WHERE token_hash = $1 AND used_at IS NULL`,
-        [tokenHash]
-      )
-    );
+    // Retrieve token from in-memory store
+    const tokenRecord = getResetToken(tokenHash);
 
-    if (tokenRes.rowCount === 0) {
+    if (!tokenRecord || tokenRecord.tenantId !== resolvedTenantId) {
       return NextResponse.json(
-        { error: 'El enlace de restablecimiento es inválido o ya fue utilizado.' },
-        { status: 400 }
-      );
-    }
-
-    const tokenRecord = tokenRes.rows[0];
-
-    // Check expiration
-    if (new Date() > new Date(tokenRecord.expires_at)) {
-      return NextResponse.json(
-        { error: 'El enlace de restablecimiento ha expirado. Solicita uno nuevo.' },
+        { error: 'El enlace de restablecimiento es inválido, ha expirado o ya fue utilizado.' },
         { status: 400 }
       );
     }
@@ -81,21 +65,13 @@ export async function POST(request: Request) {
     // Hash the new password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // NB-02: Update password and mark token as used atomically inside a transaction
-    await runWithTenant(resolvedTenantId, async () => {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query('UPDATE usuarios SET password = $1 WHERE id = $2', [hashedPassword, tokenRecord.user_id]);
-        await client.query('UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1', [tokenRecord.id]);
-        await client.query('COMMIT');
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      } finally {
-        client.release();
-      }
-    });
+    // Update password in DB
+    await runWithTenant(resolvedTenantId, () =>
+      pool.query('UPDATE usuarios SET password = $1 WHERE id = $2', [hashedPassword, tokenRecord.userId])
+    );
+
+    // Invalidate/consume token in memory
+    consumeResetToken(tokenHash);
 
     return NextResponse.json({
       success: true,

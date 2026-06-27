@@ -11,6 +11,7 @@ export default function Home() {
   const router = useRouter();
   const user = usePOSStore(state => state.user);
   const globalLogin = usePOSStore(state => state.globalLogin);
+  const forgotPassword = usePOSStore(state => state.forgotPassword);
 
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -18,6 +19,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(true);
+  const [isForgot, setIsForgot] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     // Si el usuario ya tiene sesión activa, redirigir inmediatamente a su espacio
@@ -50,6 +53,27 @@ export default function Home() {
     } else {
       setError(result.error || "Credenciales incorrectas o usuario inactivo.");
       toast.error(result.error || "Error al iniciar sesión.");
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!email) {
+      toast.error("Por favor ingresa tu correo electrónico.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setForgotSuccess(null);
+    
+    const success = await forgotPassword(email, "single");
+    setLoading(false);
+    
+    if (success) {
+      setForgotSuccess("Si el correo electrónico está registrado, recibirás un enlace de recuperación en breve.");
+      toast.success("Enlace de recuperación enviado.");
+    } else {
+      setError("Error al procesar la solicitud. Inténtalo más tarde.");
+      toast.error("Error al restablecer la contraseña.");
     }
   }
 
@@ -107,9 +131,13 @@ export default function Home() {
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-3xl font-extrabold text-[#0F172A] tracking-tight">Iniciar Sesión</h2>
+            <h2 className="text-3xl font-extrabold text-[#0F172A] tracking-tight">
+              {isForgot ? "Recuperar Contraseña" : "Iniciar Sesión"}
+            </h2>
             <p className="text-[#64748B] text-sm">
-              Ingresa tus credenciales para acceder a tu negocio
+              {isForgot 
+                ? "Ingresa tu correo para recibir un enlace de recuperación" 
+                : "Ingresa tus credenciales para acceder a tu negocio"}
             </p>
           </div>
 
@@ -123,26 +151,41 @@ export default function Home() {
               icon={AtSign} 
             />
             
-            <div>
-              <label className="text-sm font-semibold text-[#0F172A] block mb-1">Contraseña</label>
-              <div className="relative">
-                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
-                <input 
-                  type={show ? "text" : "password"} 
-                  value={pw} 
-                  onChange={e => setPw(e.target.value)} 
-                  placeholder="••••••••"
-                  className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/30 focus:border-[#1B4FD8] transition-all" 
-                />
-                <button 
-                  type="button" 
-                  onClick={() => setShow(s => !s)} 
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B] cursor-pointer"
-                >
-                  {show ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
+            {!isForgot && (
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-sm font-semibold text-[#0F172A]">Contraseña</label>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setIsForgot(true);
+                      setError(null);
+                      setForgotSuccess(null);
+                    }}
+                    className="text-xs text-[#1B4FD8] font-semibold hover:underline cursor-pointer"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+                  <input 
+                    type={show ? "text" : "password"} 
+                    value={pw} 
+                    onChange={e => setPw(e.target.value)} 
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/30 focus:border-[#1B4FD8] transition-all" 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShow(s => !s)} 
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B] cursor-pointer"
+                  >
+                    {show ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {error && (
               <div className="bg-red-50 text-red-700 text-xs font-semibold p-3.5 rounded-xl border border-red-200">
@@ -150,9 +193,34 @@ export default function Home() {
               </div>
             )}
 
-            <Btn v="primary" sz="lg" full onClick={handleGlobalLogin} disabled={loading}>
-              {loading ? <><RefreshCw size={14} className="animate-spin" /> Ingresando…</> : "Ingresar a mi negocio"}
-            </Btn>
+            {forgotSuccess && (
+              <div className="bg-emerald-50 text-emerald-800 text-xs font-semibold p-3.5 rounded-xl border border-emerald-200">
+                {forgotSuccess}
+              </div>
+            )}
+
+            {isForgot ? (
+              <div className="space-y-3">
+                <Btn v="primary" sz="lg" full onClick={handleForgotPassword} disabled={loading}>
+                  {loading ? <><RefreshCw size={14} className="animate-spin" /> Enviando…</> : "Enviar enlace de recuperación"}
+                </Btn>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setIsForgot(false);
+                    setError(null);
+                    setForgotSuccess(null);
+                  }}
+                  className="w-full text-center text-sm text-[#64748B] font-semibold hover:text-[#1B4FD8] py-1 cursor-pointer hover:underline"
+                >
+                  Volver al inicio de sesión
+                </button>
+              </div>
+            ) : (
+              <Btn v="primary" sz="lg" full onClick={handleGlobalLogin} disabled={loading}>
+                {loading ? <><RefreshCw size={14} className="animate-spin" /> Ingresando…</> : "Ingresar a mi negocio"}
+              </Btn>
+            )}
           </div>
 
           <div className="pt-6 border-t border-[#F1F5F9] text-center">

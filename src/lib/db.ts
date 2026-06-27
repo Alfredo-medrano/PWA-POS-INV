@@ -193,37 +193,8 @@ async function initDatabase() {
       )
     `);
 
-    // 9. Password Reset Tokens (BUG-03 FIX)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS password_reset_tokens (
-        id VARCHAR(36) PRIMARY KEY,
-        user_id VARCHAR(36) NOT NULL,
-        token_hash VARCHAR(64) NOT NULL,
-        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-        used_at TIMESTAMP WITH TIME ZONE,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Add Foreign Key constraint if not present
-    await client.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'fk_password_reset_user'
-        ) THEN
-          ALTER TABLE password_reset_tokens 
-          ADD CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE;
-        END IF;
-      END $$;
-    `);
-
-    // Create index on token_hash if it does not exist
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens (token_hash);
-    `);
-
     // --- MIGRACIÓN MULTITENANT ---
-    const tablesToMigrate = ['productos', 'clientes', 'ventas', 'configuracion', 'usuarios', 'proveedores', 'compras', 'egresos', 'password_reset_tokens'];
+    const tablesToMigrate = ['productos', 'clientes', 'ventas', 'configuracion', 'usuarios', 'proveedores', 'compras', 'egresos'];
     
     for (const table of tablesToMigrate) {
       // 1. Agregar columna tenant_id

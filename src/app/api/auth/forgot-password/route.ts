@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { runWithTenant } from '@/lib/tenant';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 import { sendEmail, getResetPasswordTemplate } from '@/lib/email';
+import { storeResetToken } from '@/lib/reset-tokens';
 
 // VULN-01 FIX: 3 reset attempts per IP every 15 minutes (stricter than login)
 const RESET_MAX_ATTEMPTS = 3;
@@ -32,12 +33,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El correo electrónico es obligatorio' }, { status: 400 });
     }
 
-    // Resolver slug o ID a la clave física UUID del tenant
-    const tenantRes = await pool.query('SELECT id FROM tenants WHERE id = $1 OR slug = $1', [tenantId]);
-    if (tenantRes.rowCount === 0) {
-      return NextResponse.json({ error: 'Empresa no registrada' }, { status: 404 });
+    let resolvedTenantId: string | null = null;
+
+    // Resolve tenant ID globally using the email if tenantId is the default 'single'
+    if (tenantId === 'single') {
+      const globalUserRes = await pool.query('SELECT tenant_id FROM get_user_by_email($1)', [email]);
+      if (globalUserRes.rowCount > 0) {
+        resolvedTenantId = globalUserRes.rows[0].tenant_id;
+      }
     }
-    const resolvedTenantId = tenantRes.rows[0].id;
+
+    // Fallback to resolving the tenant ID by slug/ID
+    if (!resolvedTenantId) {
+      const tenantRes = await pool.query('SELECT id FROM tenants WHERE id = $1 OR slug = $1', [tenantId]);
+      if (tenantRes.rowCount === 0) {
+        return NextResponse.json({ error: 'Empresa no registrada' }, { status: 404 });
+      }
+      resolvedTenantId = tenantRes.rows[0].id;
+    }
 
     // Ejecutar la consulta del usuario dentro del contexto del tenant
     const userRes = await runWithTenant(resolvedTenantId, () =>
@@ -61,21 +74,8 @@ export async function POST(request: Request) {
     const tokenId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes TTL
 
-    // Invalidate any previous unused tokens for this user
-    await runWithTenant(resolvedTenantId, () =>
-      pool.query(
-        `UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND used_at IS NULL`,
-        [u.id]
-      )
-    );
-
-    // Store the hashed token
-    await runWithTenant(resolvedTenantId, () =>
-      pool.query(
-        `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)`,
-        [tokenId, u.id, tokenHash, expiresAt]
-      )
-    );
+    // Store the hashed token in memory
+    storeResetToken(tokenHash, u.id, resolvedTenantId, expiresAt);
 
     // Reset link pointing to the password reset confirmation route
     const resetLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password?token=${rawToken}&tenant=${resolvedTenantId}`;
