@@ -3,9 +3,27 @@ import pool from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { runWithTenant } from '@/lib/tenant';
 import { signSession } from '@/lib/auth-crypto';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+
+// VULN-01 FIX: 5 login attempts per IP every 15 minutes
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
 export async function POST(request: Request) {
   try {
+    // Rate limit check before any processing
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(`login:${ip}`, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_MS);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo más tarde.' },
+        { 
+          status: 429,
+          headers: { 'Retry-After': String(rateLimit.retryAfter) }
+        }
+      );
+    }
+
     const body = await request.json();
     const { email, password, tenantId = 'single' } = body;
     

@@ -12,12 +12,14 @@ export async function middleware(request: NextRequest) {
   requestHeaders.delete('x-user-role');
   requestHeaders.delete('x-user-id');
 
-  // Proteger rutas de API excepto las públicas (login, forgot-password, registro de setup, estado de setup, y GET de configuración)
+  // Proteger rutas de API excepto las públicas
+  // VULN-02 FIX: /api/auth/register removed from public routes (now requires auth)
   if (pathname.startsWith('/api')) {
     const isPublic =
       pathname === '/api/auth/login' ||
       pathname === '/api/auth/global-login' ||
       pathname === '/api/auth/forgot-password' ||
+      pathname === '/api/auth/reset-password' ||
       pathname === '/api/setup/status' ||
       pathname === '/api/setup/register' ||
       (pathname === '/api/configuracion' && method === 'GET');
@@ -57,4 +59,3 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/api/:path*'],
 };
-

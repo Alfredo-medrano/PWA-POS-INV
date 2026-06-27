@@ -193,8 +193,20 @@ async function initDatabase() {
       )
     `);
 
+    // 9. Password Reset Tokens (BUG-03 FIX)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        token_hash VARCHAR(64) NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        used_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // --- MIGRACIÓN MULTITENANT ---
-    const tablesToMigrate = ['productos', 'clientes', 'ventas', 'configuracion', 'usuarios', 'proveedores', 'compras', 'egresos'];
+    const tablesToMigrate = ['productos', 'clientes', 'ventas', 'configuracion', 'usuarios', 'proveedores', 'compras', 'egresos', 'password_reset_tokens'];
     
     for (const table of tablesToMigrate) {
       // 1. Agregar columna tenant_id

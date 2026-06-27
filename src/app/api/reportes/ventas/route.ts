@@ -1,25 +1,38 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireRole } from '@/lib/auth';
+import { handleAuthError } from '@/lib/api-helpers';
 
 export const dynamic = 'force-dynamic';
 
+// Allowlist of valid period values mapped to PostgreSQL interval strings
+const VALID_INTERVALS: Record<string, string> = {
+  semana: '7 days',
+  mes: '30 days',
+  anio: '12 months',
+};
+
 export async function GET(request: Request) {
   try {
+    await requireRole(['Administrador', 'Cajero']);
+
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period') || 'mes';
 
-    let interval = '30 days';
-    if (period === 'semana') {
-      interval = '7 days';
-    } else if (period === 'anio') {
-      interval = '12 months';
+    const interval = VALID_INTERVALS[period];
+    if (!interval) {
+      return NextResponse.json(
+        { error: `Período inválido: '${period}'. Valores permitidos: semana, mes, anio.` },
+        { status: 400 }
+      );
     }
 
+    // BUG-01 FIX: Parameterized interval instead of string interpolation
     const result = await pool.query(`
       SELECT created_at, total FROM ventas
-      WHERE created_at >= NOW() - INTERVAL '${interval}'
+      WHERE created_at >= NOW() - $1::interval
       ORDER BY created_at ASC
-    `);
+    `, [interval]);
 
     const monthsShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
     const dataMap: Record<string, number> = {};
@@ -71,7 +84,9 @@ export async function GET(request: Request) {
     const data = Object.keys(dataMap).map(k => ({ m: k, v: parseFloat(dataMap[k].toFixed(2)) }));
 
     return NextResponse.json(data);
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al obtener reportes de ventas' }, { status: 500 });
   }

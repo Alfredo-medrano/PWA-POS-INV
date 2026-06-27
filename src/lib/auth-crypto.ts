@@ -4,7 +4,23 @@ export interface SessionData {
   tenantId: string;
 }
 
-const SESSION_SECRET = process.env.SESSION_SECRET || 'a_very_secure_and_long_default_secret_key_for_pos_system_2026';
+// Internal payload type includes expiration — callers never see this directly
+interface SessionPayload extends SessionData {
+  exp: number;
+}
+
+// VULN-04 FIX: Fail hard if SESSION_SECRET is not configured instead of using a guessable default.
+// This prevents production deployments from running with a publicly known secret.
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  throw new Error(
+    'FATAL: SESSION_SECRET environment variable is required. ' +
+    'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"'
+  );
+}
+
+// Session TTL: 8 hours (in milliseconds)
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
 function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -39,6 +55,19 @@ async function getHmacSignature(payload: string, secret: string): Promise<string
   return arrayBufferToBase64Url(signature);
 }
 
+/**
+ * VULN-06 FIX: Constant-time string comparison to prevent timing attacks.
+ * Works in Edge Runtime without Node.js crypto.timingSafeEqual.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 function encodePayload(data: any): string {
   const json = JSON.stringify(data);
   const bytes = new TextEncoder().encode(json);
@@ -63,9 +92,14 @@ function decodePayload(payload: string): any {
   return JSON.parse(json);
 }
 
-// Sign session data with HMAC-SHA256
+// Sign session data with HMAC-SHA256 + expiration
 export async function signSession(data: SessionData): Promise<string> {
-  const payload = encodePayload(data);
+  // BUG-04 FIX: Include expiration timestamp in the signed payload
+  const payloadData: SessionPayload = {
+    ...data,
+    exp: Date.now() + SESSION_TTL_MS,
+  };
+  const payload = encodePayload(payloadData);
   const signature = await getHmacSignature(payload, SESSION_SECRET);
   return `${payload}.${signature}`;
 }
@@ -79,13 +113,20 @@ export async function verifySession(cookieValue: string): Promise<SessionData | 
     if (!payload || !signature) return null;
 
     const expectedSignature = await getHmacSignature(payload, SESSION_SECRET);
-    if (expectedSignature !== signature) {
+    
+    // VULN-06 FIX: Constant-time comparison instead of !== operator
+    if (!timingSafeEqual(expectedSignature, signature)) {
       return null;
     }
 
     const data = decodePayload(payload);
     if (data && typeof data === 'object' && data.id && data.role && data.tenantId) {
-      return data as SessionData;
+      // BUG-04 FIX: Verify session expiration
+      if (typeof data.exp === 'number' && Date.now() > data.exp) {
+        return null; // Session expired
+      }
+      // Return only the SessionData fields (strip exp from the returned object)
+      return { id: data.id, role: data.role, tenantId: data.tenantId };
     }
     return null;
   } catch (e: any) {

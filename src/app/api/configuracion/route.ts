@@ -2,17 +2,8 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { runWithTenant } from '@/lib/tenant';
 import { requireRole } from '@/lib/auth';
+import { handleAuthError } from '@/lib/api-helpers';
 import crypto from 'crypto';
-
-function handleAuthError(err: any) {
-  if (err.message === 'UNAUTHORIZED') {
-    return NextResponse.json({ error: 'No autorizado. Por favor inicia sesión.' }, { status: 401 });
-  }
-  if (err.message === 'FORBIDDEN') {
-    return NextResponse.json({ error: 'Acceso denegado. Permisos insuficientes.' }, { status: 403 });
-  }
-  return null;
-}
 
 export async function GET(request: Request) {
   try {

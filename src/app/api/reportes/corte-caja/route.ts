@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireRole } from '@/lib/auth';
+import { handleAuthError } from '@/lib/api-helpers';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    await requireRole(['Administrador', 'Cajero']);
+
     const startOfToday = new Date();
     startOfToday.setHours(0,0,0,0);
 
@@ -54,7 +58,9 @@ export async function GET() {
       { l: "Egresos",          v: -egresos,    c: "text-red-600" },
       { l: "Total esperado",   v: totalEsperado,   c: "text-[#1B4FD8]" },
     ]);
-  } catch (err) {
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al obtener corte de caja' }, { status: 500 });
   }

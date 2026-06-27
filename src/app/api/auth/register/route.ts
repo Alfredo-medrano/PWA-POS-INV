@@ -4,25 +4,30 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { runWithTenant } from '@/lib/tenant';
 import { signSession } from '@/lib/auth-crypto';
+import { requireRole } from '@/lib/auth';
+import { handleAuthError } from '@/lib/api-helpers';
 
+// VULN-02 FIX: Registration is now behind authentication.
+// Only Administrators can create new user accounts for their tenant.
 export async function POST(request: Request) {
   try {
+    const session = await requireRole(['Administrador']);
+
     const body = await request.json();
-    const { name, email, password, tenantId = 'single' } = body;
+    const { name, email, password, role } = body;
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: 'Todos los campos son obligatorios' }, { status: 400 });
     }
 
-    // Resolver slug o ID a la clave física UUID del tenant
-    const tenantRes = await pool.query('SELECT id, slug FROM tenants WHERE id = $1 OR slug = $1', [tenantId]);
-    if (tenantRes.rowCount === 0) {
-      return NextResponse.json({ error: 'Empresa no registrada' }, { status: 404 });
-    }
-    const resolvedTenantId = tenantRes.rows[0].id;
-    const resolvedTenantSlug = tenantRes.rows[0].slug;
+    // Use the authenticated admin's tenant — no external tenantId parameter needed
+    const resolvedTenantId = session.tenantId;
 
-    // Check if email already exists
+    // Resolve tenant slug for the response
+    const tenantRes = await pool.query('SELECT slug FROM tenants WHERE id = $1', [resolvedTenantId]);
+    const resolvedTenantSlug = tenantRes.rowCount > 0 ? tenantRes.rows[0].slug : null;
+
+    // Check if email already exists globally
     const checkUser = await pool.query('SELECT id FROM get_user_by_email($1)', [email]);
     if (checkUser.rowCount > 0) {
       return NextResponse.json({ error: 'El correo electrónico ya está registrado' }, { status: 400 });
@@ -32,35 +37,25 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(password, 12);
     const id = crypto.randomUUID();
 
-    // Insert user within the tenant's context
+    // Validate role — only allow Cajero or Administrador
+    const allowedRoles = ['Cajero', 'Administrador'];
+    const assignedRole = allowedRoles.includes(role) ? role : 'Cajero';
+
+    // Insert user within the admin's tenant context
     await runWithTenant(resolvedTenantId, () =>
       pool.query(
         'INSERT INTO usuarios (id, name, email, password, role, status) VALUES ($1, $2, $3, $4, $5, $6)',
-        [id, name, email, hashedPassword, 'Cajero', 'Activo']
+        [id, name, email, hashedPassword, assignedRole, 'Activo']
       )
     );
 
-    const userPayload = { 
-      id, 
-      name, 
-      email, 
-      role: 'Cajero', 
-      status: 'Activo',
-      tenantId: resolvedTenantId,
-      tenantSlug: resolvedTenantSlug
-    };
-    
-    const response = NextResponse.json({ success: true, user: userPayload }, { status: 201 });
-    
-    response.cookies.set('pos_session', await signSession({ id, role: 'Cajero', tenantId: resolvedTenantId }), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/'
-    });
-
-    return response;
-  } catch (err) {
+    return NextResponse.json({ 
+      success: true, 
+      user: { id, name, email, role: assignedRole, status: 'Activo', tenantId: resolvedTenantId, tenantSlug: resolvedTenantSlug }
+    }, { status: 201 });
+  } catch (err: any) {
+    const authRes = handleAuthError(err);
+    if (authRes) return authRes;
     console.error(err);
     return NextResponse.json({ error: 'Error al registrar usuario' }, { status: 500 });
   }
