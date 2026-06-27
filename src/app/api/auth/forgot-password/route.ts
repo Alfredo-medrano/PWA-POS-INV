@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { runWithTenant } from '@/lib/tenant';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { sendEmail, getResetPasswordTemplate } from '@/lib/email';
 
 // VULN-01 FIX: 3 reset attempts per IP every 15 minutes (stricter than login)
 const RESET_MAX_ATTEMPTS = 3;
@@ -76,8 +77,7 @@ export async function POST(request: Request) {
       )
     );
 
-    // TODO: Replace with actual email sending (Resend, SendGrid, or Nodemailer)
-    // The reset link should point to: /reset-password?token=<rawToken>&tenant=<resolvedTenantId>
+    // Reset link pointing to the password reset confirmation route
     const resetLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password?token=${rawToken}&tenant=${resolvedTenantId}`;
     
     if (process.env.NODE_ENV === 'development') {
@@ -85,8 +85,12 @@ export async function POST(request: Request) {
       console.log(`   Token expires at: ${expiresAt.toISOString()}`);
     }
 
-    // Placeholder: sendResetEmail(u.email, u.name, resetLink);
-    // When integrating an email provider, implement this function in src/lib/email.ts
+    // Send the password recovery email using Resend
+    await sendEmail({
+      to: u.email,
+      subject: 'Restablecer Contraseña - PWA-POS-INV',
+      html: getResetPasswordTemplate(u.name, resetLink),
+    });
 
     return NextResponse.json({
       success: true,
