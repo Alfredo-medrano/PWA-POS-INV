@@ -130,7 +130,7 @@ export default function POS({ dteConnected }: { dteConnected: boolean }) {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#CBD5E1]" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar o escanear producto…"
             className="w-full pl-9 pr-9 py-2.5 bg-slate-50 border border-[#E2E8F0] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8] transition-all" />
-          <button className="absolute right-3 top-1/2 -translate-y-1/2 text-[#CBD5E1] hover:text-[#64748B] transition-colors"><Camera size={14} /></button>
+          <button onClick={() => { const el = document.querySelector<HTMLInputElement>('input[placeholder="Buscar o escanear producto…"]'); if (el) el.focus(); }} title="Enfocar campo de búsqueda para escanear código" className="absolute right-3 top-1/2 -translate-y-1/2 text-[#CBD5E1] hover:text-[#1B4FD8] transition-colors"><Camera size={14} /></button>
         </div>
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin">
           {CATS.map(c => (

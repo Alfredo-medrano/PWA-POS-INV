@@ -27,7 +27,10 @@ if (process.env.NODE_ENV === 'production') {
 // Inicializar tablas e incorporar columnas nuevas con multitenancy y RLS
 async function initDatabase() {
   const client = await rawPool.connect();
-  
+
+  const failedSteps: { label: string; code: string; message: string }[] = [];
+  const PERMISSION_CODES = new Set(['42501', '42P01']);
+
   const runQuery = async (label: string, queryText: string, params?: any[]) => {
     try {
       await client.query(queryText, params);
@@ -36,7 +39,7 @@ async function initDatabase() {
       if (e.code === '42701' || e.code === '42P07' || e.code === '42710') {
         return;
       }
-      console.warn(`⚠️ Warning during [${label}]: ${e.message} (code: ${e.code})`);
+      failedSteps.push({ label, code: e.code, message: e.message });
     }
   };
 
@@ -284,11 +287,30 @@ async function initDatabase() {
       $$ LANGUAGE plpgsql;
     `);
 
+    // Grant execute to the current user's role so it works regardless of which DB user is configured
     await runQuery('Grant execute on get_user_by_email', `
-      GRANT EXECUTE ON FUNCTION get_user_by_email(VARCHAR) TO pos_app_user;
+      GRANT EXECUTE ON FUNCTION get_user_by_email(VARCHAR) TO PUBLIC;
     `);
 
-    console.log('✅ Base de datos inicializada.');
+    if (failedSteps.length === 0) {
+      console.log('✅ Base de datos inicializada sin errores.');
+    } else {
+      const permissionErrors = failedSteps.filter(s => PERMISSION_CODES.has(s.code));
+      const otherErrors = failedSteps.filter(s => !PERMISSION_CODES.has(s.code));
+
+      if (permissionErrors.length > 0) {
+        console.error(
+          `❌ Base de datos NO se inicializó correctamente: ${permissionErrors.length} pasos fallaron por PERMISOS.\n` +
+          `   El rol de conexión (DATABASE_URL) no es owner de las tablas / no tiene permisos sobre el schema "public".\n` +
+          `   Revisa el rol owner en Neon (Dashboard → Roles) y actualiza DATABASE_URL, o ejecuta GRANT ALL PRIVILEGES manualmente.\n` +
+          `   Primer paso fallido: [${permissionErrors[0].label}] ${permissionErrors[0].message}`
+        );
+      }
+      if (otherErrors.length > 0) {
+        console.warn(`⚠️ ${otherErrors.length} pasos de migración fallaron por otras causas:`);
+        otherErrors.forEach(s => console.warn(`   - [${s.label}] (${s.code}) ${s.message}`));
+      }
+    }
   } catch (err: any) {
     console.error('❌ Error crítico inicializando base de datos:', err);
   } finally {

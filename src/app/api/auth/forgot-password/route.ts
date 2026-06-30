@@ -34,8 +34,8 @@ export async function POST(request: Request) {
 
     let resolvedTenantId: string | null = null;
 
-    // Resolve tenant ID globally using the email if tenantId is the default 'single'
-    if (tenantId === 'single') {
+    // Resolve tenant ID globally using the email if tenantId is empty or the default 'single'
+    if (!tenantId || tenantId === 'single') {
       const globalUserRes = await pool.query('SELECT tenant_id FROM get_user_by_email($1)', [email]);
       if (globalUserRes.rowCount > 1) {
         return NextResponse.json({
@@ -75,7 +75,8 @@ export async function POST(request: Request) {
     const rawToken = await signResetToken(u.id, resolvedTenantId, u.password);
 
     // Reset link pointing to the password reset confirmation route
-    const resetLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password?token=${rawToken}&tenant=${resolvedTenantId}`;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : '');
+    const resetLink = `${baseUrl}/reset-password?token=${rawToken}&tenant=${resolvedTenantId}`;
     
     if (process.env.NODE_ENV === 'development') {
       console.log(`🔑 [PASSWORD RESET - DEV ONLY] Email: ${email}, Reset Link: ${resetLink}`);

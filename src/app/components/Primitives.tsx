@@ -48,17 +48,17 @@ export function Btn({ v = "primary", sz = "md", children, onClick, disabled, ful
 }
 
 // ─── Input ────────────────────────────────────────────────────────────────────
-export function Input({ label, hint, type = "text", placeholder, value, onChange, icon: Icon, error, className = "" }: {
-  label?: string; hint?: string; type?: string; placeholder?: string;
+export function Input({ id, label, hint, type = "text", placeholder, value, onChange, icon: Icon, error, className = "" }: {
+  id?: string; label?: string; hint?: string; type?: string; placeholder?: string;
   value: string; onChange: (v: string) => void;
   icon?: React.ElementType; error?: string; className?: string;
 }) {
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
-      {label && <label className="text-sm font-semibold text-[#0F172A]">{label}</label>}
+      {label && <label htmlFor={id} className="text-sm font-semibold text-[#0F172A]">{label}</label>}
       <div className="relative">
         {Icon && <Icon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />}
-        <input type={type} placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)}
+        <input id={id} type={type} placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)}
           className={`w-full ${Icon ? "pl-9" : "pl-3"} pr-3 py-2 bg-slate-50 border text-sm text-[#0F172A] placeholder-[#CBD5E1] focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/30 focus:border-[#1B4FD8] transition-all rounded-lg ${error ? "border-red-400 bg-red-50" : "border-[#E2E8F0]"}`} />
       </div>
       {hint && !error && <p className="text-xs text-[#94A3B8]">{hint}</p>}

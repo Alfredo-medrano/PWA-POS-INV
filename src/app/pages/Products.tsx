@@ -21,7 +21,9 @@ export default function Products() {
     minStock: "",
     cat: "Bebidas",
     img: "",
-    barcode: ""
+    barcode: "",
+    unit: "Unidad",
+    supplierId: ""
   });
 
   useEffect(() => {
@@ -40,7 +42,9 @@ export default function Products() {
       stock: String(p.stock),
       minStock: String(p.minStock),
       img: p.img || "",
-      barcode: p.barcode || ""
+      barcode: p.barcode || "",
+      unit: (p as any).unit || "Unidad",
+      supplierId: (p as any).supplierId || ""
     });
     setDrawer(true);
   }
@@ -56,7 +60,9 @@ export default function Products() {
       stock: "",
       minStock: "",
       img: "",
-      barcode: ""
+      barcode: "",
+      unit: "Unidad",
+      supplierId: ""
     });
     setDrawer(true);
   }
@@ -73,7 +79,9 @@ export default function Products() {
       stock: parseInt(form.stock) || 0,
       minStock: parseInt(form.minStock) || 0,
       img: form.img || undefined,
-      barcode: form.barcode || undefined
+      barcode: form.barcode || undefined,
+      unit: form.unit || undefined,
+      supplierId: form.supplierId || undefined
     };
 
     let success = false;
@@ -176,8 +184,8 @@ export default function Products() {
                       <Input label="SKU / Código" placeholder="CC2L" value={form.sku} onChange={v => setForm(f => ({ ...f, sku: v }))} />
                       <Input label="Código de barras" placeholder="7501055300227" value={form.barcode} onChange={v => setForm(f => ({ ...f, barcode: v }))} icon={Hash} />
                     </div>
-                    <div className="border-2 border-dashed border-[#E2E8F0] rounded-xl p-5 text-center hover:border-[#1B4FD8]/40 hover:bg-[#EEF2FF]/20 transition-all cursor-pointer"><Camera size={20} className="text-[#CBD5E1] mx-auto mb-1.5" /><p className="text-xs text-[#94A3B8] font-medium">Clic para subir imagen (URL)</p></div>
-                    <Input label="URL de la imagen" placeholder="https://..." value={form.img} onChange={v => setForm(f => ({ ...f, img: v }))} />
+                    <div className="border-2 border-dashed border-[#E2E8F0] rounded-xl p-5 text-center hover:border-[#1B4FD8]/40 hover:bg-[#EEF2FF]/20 transition-all cursor-pointer" onClick={() => { const el = document.getElementById('product-img-url'); if (el) el.focus(); }}><Camera size={20} className="text-[#CBD5E1] mx-auto mb-1.5" /><p className="text-xs text-[#94A3B8] font-medium">Clic para pegar URL de imagen</p></div>
+                    <Input id="product-img-url" label="URL de la imagen" placeholder="https://..." value={form.img} onChange={v => setForm(f => ({ ...f, img: v }))} />
                   </div>
                 )},
                 { title: "Precios", content: (
@@ -195,13 +203,13 @@ export default function Products() {
                       <Input label="Stock inicial" type="number" placeholder="0" value={form.stock} onChange={v => setForm(f => ({ ...f, stock: v }))} />
                       <Input label="Stock mínimo (alerta)" type="number" placeholder="0" value={form.minStock} onChange={v => setForm(f => ({ ...f, minStock: v }))} />
                     </div>
-                    <div><label className="text-sm font-semibold text-[#0F172A] block mb-1">Unidad de medida</label><select className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]">{["Unidad", "Caja", "Libra", "Litro", "Docena", "Paquete"].map(u => <option key={u}>{u}</option>)}</select></div>
+                    <div><label className="text-sm font-semibold text-[#0F172A] block mb-1">Unidad de medida</label><select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]">{["Unidad", "Caja", "Libra", "Litro", "Docena", "Paquete"].map(u => <option key={u}>{u}</option>)}</select></div>
                   </div>
                 )},
                 { title: "Clasificación", content: (
                   <div className="grid grid-cols-2 gap-3">
                     <div><label className="text-sm font-semibold text-[#0F172A] block mb-1">Categoría</label><select value={form.cat} onChange={e => setForm(f => ({ ...f, cat: e.target.value }))} className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]">{CATS.filter(c => c !== "Todos").map(c => <option key={c}>{c}</option>)}</select></div>
-                    <div><label className="text-sm font-semibold text-[#0F172A] block mb-1">Proveedor</label><select className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]"><option>Seleccionar…</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                    <div><label className="text-sm font-semibold text-[#0F172A] block mb-1">Proveedor</label><select value={form.supplierId} onChange={e => setForm(f => ({ ...f, supplierId: e.target.value }))} className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]"><option value="">Sin proveedor</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
                   </div>
                 )},
               ].map(sec => (

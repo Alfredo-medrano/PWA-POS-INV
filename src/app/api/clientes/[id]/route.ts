@@ -2,21 +2,24 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 import { handleAuthError } from '@/lib/api-helpers';
+import { runWithTenant } from '@/lib/tenant';
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
-    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
+    const session = await requireRole(['Administrador', 'Supervisor', 'Cajero']);
     const { id } = params;
     const body = await request.json();
     const { name, type, nit, nrc, dui, phone, email, address } = body;
-    
-    const result = await pool.query(`
-      UPDATE clientes 
-      SET name = $1, type = $2, nit = $3, nrc = $4, dui = $5, phone = $6, email = $7, address = $8
-      WHERE id = $9
-      RETURNING *
-    `, [name, type || 'natural', nit || null, nrc || null, dui || null, phone || null, email || null, address || null, id]);
-    
+
+    const result = await runWithTenant(session.tenantId, () =>
+      pool.query(`
+        UPDATE clientes 
+        SET name = $1, type = $2, nit = $3, nrc = $4, dui = $5, phone = $6, email = $7, address = $8
+        WHERE id = $9
+        RETURNING *
+      `, [name, type || 'natural', nit || null, nrc || null, dui || null, phone || null, email || null, address || null, id])
+    );
+
     if (result.rowCount === 0) {
       return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
     }
@@ -31,9 +34,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
-    await requireRole(['Administrador', 'Supervisor']);
+    const session = await requireRole(['Administrador', 'Supervisor']);
     const { id } = params;
-    const result = await pool.query('DELETE FROM clientes WHERE id = $1', [id]);
+
+    const result = await runWithTenant(session.tenantId, () =>
+      pool.query('DELETE FROM clientes WHERE id = $1', [id])
+    );
+
     if (result.rowCount === 0) {
       return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
     }
@@ -45,4 +52,3 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     return NextResponse.json({ error: 'Error al eliminar cliente' }, { status: 500 });
   }
 }
-

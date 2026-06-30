@@ -65,7 +65,8 @@ export default function Home() {
     setError(null);
     setForgotSuccess(null);
     
-    const success = await forgotPassword(email, "single");
+    // Pass empty string: the API resolves the tenant automatically from the user's email
+    const success = await forgotPassword(email, "");
     setLoading(false);
     
     if (success) {

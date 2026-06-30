@@ -3,44 +3,49 @@ import pool from '@/lib/db';
 import crypto from 'crypto';
 import { requireRole } from '@/lib/auth';
 import { handleAuthError } from '@/lib/api-helpers';
+import { runWithTenant } from '@/lib/tenant';
 
 export async function GET(request: Request) {
   try {
-    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
+    const session = await requireRole(['Administrador', 'Supervisor', 'Cajero']);
 
     const { searchParams } = new URL(request.url);
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit') || '') : null;
     const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset') || '') : 0;
 
-    let queryText = 'SELECT * FROM productos ORDER BY name ASC';
-    const params: any[] = [];
+    const data = await runWithTenant(session.tenantId, async () => {
+      let queryText = 'SELECT * FROM productos ORDER BY name ASC';
+      const params: any[] = [];
 
-    if (limit !== null && !isNaN(limit)) {
-      queryText += ' LIMIT $1 OFFSET $2';
-      params.push(limit, isNaN(offset) ? 0 : offset);
-    }
+      if (limit !== null && !isNaN(limit)) {
+        queryText += ' LIMIT $1 OFFSET $2';
+        params.push(limit, isNaN(offset) ? 0 : offset);
+      }
 
-    const result = await pool.query(queryText, params);
-    const prods = result.rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      sku: r.sku,
-      category: r.category,
-      stock: parseInt(r.stock),
-      minStock: parseInt(r.min_stock),
-      cost: parseFloat(r.cost),
-      price: parseFloat(r.price),
-      img: r.img,
-      barcode: r.barcode
-    }));
+      const result = await pool.query(queryText, params);
+      const prods = result.rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        sku: r.sku,
+        category: r.category,
+        stock: parseInt(r.stock),
+        minStock: parseInt(r.min_stock),
+        cost: parseFloat(r.cost),
+        price: parseFloat(r.price),
+        img: r.img,
+        barcode: r.barcode
+      }));
 
-    if (limit !== null) {
-      const countRes = await pool.query('SELECT COUNT(*) FROM productos');
-      const total = parseInt(countRes.rows[0].count);
-      return NextResponse.json({ products: prods, total });
-    }
+      if (limit !== null) {
+        const countRes = await pool.query('SELECT COUNT(*) FROM productos');
+        const total = parseInt(countRes.rows[0].count);
+        return { products: prods, total };
+      }
 
-    return NextResponse.json(prods);
+      return prods;
+    });
+
+    return NextResponse.json(data);
   } catch (err: any) {
     const authRes = handleAuthError(err);
     if (authRes) return authRes;
@@ -51,16 +56,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireRole(['Administrador', 'Supervisor']);
+    const session = await requireRole(['Administrador', 'Supervisor']);
     const body = await request.json();
     const { name, sku, category, stock, minStock, cost, price, img, barcode } = body;
     const id = crypto.randomUUID();
-    
-    await pool.query(`
-      INSERT INTO productos (id, name, sku, category, stock, min_stock, cost, price, img, barcode)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    `, [id, name, sku, category, parseInt(stock) || 0, parseInt(minStock) || 0, parseFloat(cost) || 0, parseFloat(price) || 0, img || null, barcode || null]);
-    
+
+    await runWithTenant(session.tenantId, () =>
+      pool.query(`
+        INSERT INTO productos (id, name, sku, category, stock, min_stock, cost, price, img, barcode)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [id, name, sku, category, parseInt(stock) || 0, parseInt(minStock) || 0, parseFloat(cost) || 0, parseFloat(price) || 0, img || null, barcode || null])
+    );
+
     return NextResponse.json({ id, name, sku, category, stock, minStock, cost, price, img, barcode }, { status: 201 });
   } catch (err: any) {
     const authRes = handleAuthError(err);
@@ -73,4 +80,3 @@ export async function POST(request: Request) {
     }
   }
 }
-

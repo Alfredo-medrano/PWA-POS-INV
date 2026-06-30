@@ -81,33 +81,35 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireRole(['Administrador']);
+    const session = await requireRole(['Administrador']);
     const body = await request.json();
     const { bizName, bizType, bizPhone, bizAddress, dteUrl, dteKey, aperturaCaja } = body;
-    
-    const check = await pool.query('SELECT id, dte_key FROM configuracion LIMIT 1');
-    if (check.rowCount > 0) {
-      const id = check.rows[0].id;
-      const oldDteKey = check.rows[0].dte_key;
-      // Preservar la clave existente si el cliente envía la máscara de vuelta
-      const finalDteKey = dteKey === '••••••••' ? oldDteKey : dteKey;
-      
-      await pool.query(`
-        UPDATE configuracion
-        SET biz_name = $1, biz_type = $2, biz_phone = $3, biz_address = $4, dte_url = $5, dte_key = $6, apertura_caja = $7, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $8
-      `, [bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, finalDteKey || null, parseFloat(aperturaCaja) || 200.00, id]);
-      return NextResponse.json({ success: true, message: 'Configuración actualizada' });
-    } else {
-      const id = crypto.randomUUID();
-      const finalDteKey = dteKey === '••••••••' ? null : dteKey;
-      
-      await pool.query(`
-        INSERT INTO configuracion (id, biz_name, biz_type, biz_phone, biz_address, dte_url, dte_key, apertura_caja)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `, [id, bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, finalDteKey || null, parseFloat(aperturaCaja) || 200.00]);
-      return NextResponse.json({ success: true, message: 'Configuración creada' }, { status: 201 });
-    }
+
+    await runWithTenant(session.tenantId, async () => {
+      const check = await pool.query('SELECT id, dte_key FROM configuracion LIMIT 1');
+      if (check.rowCount > 0) {
+        const id = check.rows[0].id;
+        const oldDteKey = check.rows[0].dte_key;
+        // Preservar la clave existente si el cliente envía la máscara de vuelta
+        const finalDteKey = dteKey === '••••••••' ? oldDteKey : dteKey;
+        
+        await pool.query(`
+          UPDATE configuracion
+          SET biz_name = $1, biz_type = $2, biz_phone = $3, biz_address = $4, dte_url = $5, dte_key = $6, apertura_caja = $7, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $8
+        `, [bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, finalDteKey || null, parseFloat(aperturaCaja) || 200.00, id]);
+      } else {
+        const id = crypto.randomUUID();
+        const finalDteKey = dteKey === '••••••••' ? null : dteKey;
+        
+        await pool.query(`
+          INSERT INTO configuracion (id, biz_name, biz_type, biz_phone, biz_address, dte_url, dte_key, apertura_caja)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [id, bizName, bizType || null, bizPhone || null, bizAddress || null, dteUrl || null, finalDteKey || null, parseFloat(aperturaCaja) || 200.00]);
+      }
+    });
+
+    return NextResponse.json({ success: true, message: 'Configuración guardada' });
   } catch (err: any) {
     const authRes = handleAuthError(err);
     if (authRes) return authRes;

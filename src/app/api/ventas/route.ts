@@ -4,40 +4,45 @@ import crypto from 'crypto';
 import axios from 'axios';
 import { requireRole } from '@/lib/auth';
 import { handleAuthError } from '@/lib/api-helpers';
+import { runWithTenant } from '@/lib/tenant';
 
 export async function GET(request: Request) {
   try {
-    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
-    
+    const session = await requireRole(['Administrador', 'Supervisor', 'Cajero']);
+
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50') || 50;
     const offset = parseInt(searchParams.get('offset') || '0') || 0;
 
-    const result = await pool.query(`
-      SELECT id, total, pay_method, dte_status, dte_type, customer_id, customer_name, raw_dte_json, created_at
-      FROM ventas
-      ORDER BY created_at DESC
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
+    const data = await runWithTenant(session.tenantId, async () => {
+      const result = await pool.query(`
+        SELECT id, total, pay_method, dte_status, dte_type, customer_id, customer_name, raw_dte_json, created_at
+        FROM ventas
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [limit, offset]);
 
-    const countRes = await pool.query('SELECT COUNT(*) FROM ventas');
-    const totalCount = parseInt(countRes.rows[0].count);
+      const countRes = await pool.query('SELECT COUNT(*) FROM ventas');
+      const totalCount = parseInt(countRes.rows[0].count);
 
-    const sales = result.rows.map(r => ({
-      id: r.id,
-      total: parseFloat(r.total),
-      payMethod: r.pay_method,
-      dteStatus: r.dte_status,
-      dteType: r.dte_type,
-      customerId: r.customer_id,
-      customerName: r.customer_name || 'Consumidor Final',
-      items: r.raw_dte_json?.detalles || [],
-      date: new Date(r.created_at).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      time: new Date(r.created_at).toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', hour12: false }),
-      createdAt: r.created_at
-    }));
+      const sales = result.rows.map(r => ({
+        id: r.id,
+        total: parseFloat(r.total),
+        payMethod: r.pay_method,
+        dteStatus: r.dte_status,
+        dteType: r.dte_type,
+        customerId: r.customer_id,
+        customerName: r.customer_name || 'Consumidor Final',
+        items: r.raw_dte_json?.detalles || [],
+        date: new Date(r.created_at).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        time: new Date(r.created_at).toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        createdAt: r.created_at
+      }));
 
-    return NextResponse.json({ sales, total: totalCount });
+      return { sales, total: totalCount };
+    });
+
+    return NextResponse.json(data);
   } catch (err: any) {
     const authRes = handleAuthError(err);
     if (authRes) return authRes;
@@ -88,6 +93,9 @@ export async function POST(request: Request) {
       String(a.product.id).localeCompare(String(b.product.id))
     );
 
+    // Wrap the entire transaction in runWithTenant so the pool Proxy sets
+    // app.current_tenant_id before any query fires (activating RLS policies).
+    return await runWithTenant(session.tenantId, async () => {
     const client = await pool.connect();
     let saleId = crypto.randomUUID();
     let subtotal = 0.00;
@@ -301,6 +309,7 @@ export async function POST(request: Request) {
       const clientMessage = isBusinessErr ? err.message : 'Error interno al procesar la venta en el servidor.';
       return NextResponse.json({ error: clientMessage }, { status: 500 });
     }
+    }); // end runWithTenant
   } catch (err: any) {
     const authRes = handleAuthError(err);
     if (authRes) return authRes;
