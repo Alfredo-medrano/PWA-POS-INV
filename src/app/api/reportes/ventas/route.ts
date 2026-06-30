@@ -14,7 +14,7 @@ const VALID_INTERVALS: Record<string, string> = {
 
 export async function GET(request: Request) {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
 
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period') || 'mes';
@@ -27,11 +27,14 @@ export async function GET(request: Request) {
       );
     }
 
-    // BUG-01 FIX: Parameterized interval instead of string interpolation
     const result = await pool.query(`
-      SELECT created_at, total FROM ventas
+      SELECT 
+        DATE_TRUNC('day', created_at) AS date_label,
+        SUM(total)::decimal(12,2)::float AS daily_total
+      FROM ventas
       WHERE created_at >= NOW() - $1::interval
-      ORDER BY created_at ASC
+      GROUP BY date_label
+      ORDER BY date_label ASC
     `, [interval]);
 
     const monthsShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -46,9 +49,10 @@ export async function GET(request: Request) {
         dataMap[dLabel] = 0;
       }
       result.rows.forEach(r => {
-        const dLabel = daysShort[new Date(r.created_at).getDay()];
+        const dateObj = new Date(r.date_label);
+        const dLabel = daysShort[dateObj.getDay()];
         if (dataMap[dLabel] !== undefined) {
-          dataMap[dLabel] += parseFloat(r.total);
+          dataMap[dLabel] += r.daily_total;
         }
       });
     } else if (period === 'anio') {
@@ -59,9 +63,10 @@ export async function GET(request: Request) {
         dataMap[mLabel] = 0;
       }
       result.rows.forEach(r => {
-        const mLabel = monthsShort[new Date(r.created_at).getMonth()];
+        const dateObj = new Date(r.date_label);
+        const mLabel = monthsShort[dateObj.getMonth()];
         if (dataMap[mLabel] !== undefined) {
-          dataMap[mLabel] += parseFloat(r.total);
+          dataMap[mLabel] += r.daily_total;
         }
       });
     } else {
@@ -73,10 +78,10 @@ export async function GET(request: Request) {
         dataMap[dLabel] = 0;
       }
       result.rows.forEach(r => {
-        const dateObj = new Date(r.created_at);
+        const dateObj = new Date(r.date_label);
         const dLabel = `${dateObj.getDate()} ${monthsShort[dateObj.getMonth()]}`;
         if (dataMap[dLabel] !== undefined) {
-          dataMap[dLabel] += parseFloat(r.total);
+          dataMap[dLabel] += r.daily_total;
         }
       });
     }

@@ -23,15 +23,19 @@ export async function POST(request: Request) {
     await requireRole(['Administrador']);
     const body = await request.json();
     const { name, email, password, role, status } = body;
-    const id = crypto.randomUUID();
     
+    const allowedRoles = ['Administrador', 'Supervisor', 'Cajero'];
+    const assignedRole = allowedRoles.includes(role) ? role : 'Cajero';
+    
+    const id = crypto.randomUUID();
     const hashedPw = await bcrypt.hash(password, 12);
+    
     await pool.query(`
       INSERT INTO usuarios (id, name, email, password, role, status)
       VALUES ($1, $2, $3, $4, $5, $6)
-    `, [id, name, email, hashedPw, role || 'Cajero', status || 'Activo']);
+    `, [id, name, email, hashedPw, assignedRole, status || 'Activo']);
     
-    return NextResponse.json({ id, name, email, role, status }, { status: 201 });
+    return NextResponse.json({ id, name, email, role: assignedRole, status }, { status: 201 });
   } catch (err: any) {
     const authRes = handleAuthError(err);
     if (authRes) return authRes;

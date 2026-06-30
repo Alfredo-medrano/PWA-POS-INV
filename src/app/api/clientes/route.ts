@@ -6,7 +6,7 @@ import { handleAuthError } from '@/lib/api-helpers';
 
 export async function GET() {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
     const result = await pool.query('SELECT * FROM clientes ORDER BY name ASC');
     const clis = result.rows.map(r => ({
       id: r.id,
@@ -32,7 +32,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
     const body = await request.json();
     const { name, type, nit, nrc, dui, phone, email, address } = body;
     const id = crypto.randomUUID();

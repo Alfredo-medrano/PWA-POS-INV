@@ -5,21 +5,21 @@ const connectionString = process.env.DATABASE_URL;
 
 let rawPool: Pool;
 
+const poolConfig = {
+  connectionString,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+};
+
 if (process.env.NODE_ENV === 'production') {
-  rawPool = new Pool({
-    connectionString,
-    ssl: {
-      rejectUnauthorized: false,
-    },
-  });
+  rawPool = new Pool(poolConfig);
 } else {
   if (!(global as any).pool) {
-    (global as any).pool = new Pool({
-      connectionString,
-      ssl: {
-        rejectUnauthorized: false,
-      },
-    });
+    (global as any).pool = new Pool(poolConfig);
   }
   rawPool = (global as any).pool;
 }
@@ -238,6 +238,20 @@ async function initDatabase() {
       `);
     }
 
+    // Migración de idempotency_key con alcance por tenant en la tabla de ventas
+    await client.query(`
+      ALTER TABLE ventas ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(36);
+    `);
+    
+    await client.query(`
+      DO $$ BEGIN
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_ventas_tenant_idempotency
+          ON ventas (tenant_id, idempotency_key)
+          WHERE idempotency_key IS NOT NULL;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
+    `);
+
     // 8. Crear función SECURITY DEFINER para lookup de usuarios sin RLS (utilizada en login global)
     await client.query(`
       CREATE OR REPLACE FUNCTION get_user_by_email(p_email VARCHAR)
@@ -287,16 +301,10 @@ const pool = new Proxy(rawPool, {
       return async function(text: any, params?: any[]) {
         const tenantId = getTenantId();
         if (tenantId) {
-          const client = await target.connect();
+          // Obtener un cliente del proxy (lo que invoca el método connect envuelto abajo)
+          const client = await receiver.connect();
           try {
-            await client.query('BEGIN');
-            await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-            const result = await client.query(text, params);
-            await client.query('COMMIT');
-            return result;
-          } catch (err) {
-            await client.query('ROLLBACK');
-            throw err;
+            return await client.query(text, params);
           } finally {
             client.release();
           }
@@ -308,21 +316,24 @@ const pool = new Proxy(rawPool, {
     if (prop === 'connect') {
       return async function() {
         const client = await target.connect();
-        const originalQuery = client.query;
+        const tenantId = getTenantId();
         
-        // Envolver el query del cliente para inyectar el tenant_id cuando comience una transacción
-        client.query = async function(text: any, params?: any[]) {
-          const normalizedText = typeof text === 'string' ? text.trim().toUpperCase() : '';
-          if (normalizedText === 'BEGIN') {
-            const res = await originalQuery.call(this, text, params);
-            const tenantId = getTenantId();
-            if (tenantId) {
-              await originalQuery.call(this, `SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+        try {
+          if (tenantId) {
+            if ((client as any)._lastTenantId !== tenantId) {
+              await client.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenantId]);
+              (client as any)._lastTenantId = tenantId;
             }
-            return res;
+          } else {
+            if ((client as any)._lastTenantId !== undefined) {
+              await client.query(`SELECT set_config('app.current_tenant_id', '', false)`);
+              delete (client as any)._lastTenantId;
+            }
           }
-          return originalQuery.call(this, text, params);
-        } as any;
+        } catch (err) {
+          client.release();
+          throw err;
+        }
         
         return client;
       };

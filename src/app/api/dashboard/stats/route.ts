@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
 
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
@@ -38,7 +38,7 @@ export async function GET() {
     });
 
     const allTodaySales = await pool.query(`
-      SELECT total, created_at 
+      SELECT total, created_at, raw_dte_json 
       FROM ventas 
       WHERE created_at >= $1
     `, [startOfToday]);

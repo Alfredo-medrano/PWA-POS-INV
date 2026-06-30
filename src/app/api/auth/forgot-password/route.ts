@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import { runWithTenant } from '@/lib/tenant';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 import { sendEmail, getResetPasswordTemplate } from '@/lib/email';
-import { storeResetToken } from '@/lib/reset-tokens';
+import { signResetToken } from '@/lib/reset-tokens';
 
 // VULN-01 FIX: 3 reset attempts per IP every 15 minutes (stricter than login)
 const RESET_MAX_ATTEMPTS = 3;
@@ -54,7 +53,7 @@ export async function POST(request: Request) {
 
     // Ejecutar la consulta del usuario dentro del contexto del tenant
     const userRes = await runWithTenant(resolvedTenantId, () =>
-      pool.query('SELECT id, name, email FROM usuarios WHERE email = $1', [email])
+      pool.query('SELECT id, name, email, password FROM usuarios WHERE email = $1', [email])
     );
     
     if (userRes.rowCount === 0) {
@@ -67,22 +66,14 @@ export async function POST(request: Request) {
 
     const u = userRes.rows[0];
 
-    // BUG-03 FIX: Generate a secure random reset token instead of a temporary password.
-    // The token is hashed before storage so a DB leak doesn't expose valid tokens.
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const tokenId = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes TTL
-
-    // Store the hashed token in memory
-    storeResetToken(tokenHash, u.id, resolvedTenantId, expiresAt);
+    // BUG-03 FIX: Generate a secure signed stateless token containing user metadata and password signature
+    const rawToken = await signResetToken(u.id, resolvedTenantId, u.password);
 
     // Reset link pointing to the password reset confirmation route
     const resetLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password?token=${rawToken}&tenant=${resolvedTenantId}`;
     
     if (process.env.NODE_ENV === 'development') {
       console.log(`🔑 [PASSWORD RESET - DEV ONLY] Email: ${email}, Reset Link: ${resetLink}`);
-      console.log(`   Token expires at: ${expiresAt.toISOString()}`);
     }
 
     // Send the password recovery email using Resend

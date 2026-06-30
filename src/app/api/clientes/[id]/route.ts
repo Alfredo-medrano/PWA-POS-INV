@@ -5,7 +5,7 @@ import { handleAuthError } from '@/lib/api-helpers';
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
     const { id } = params;
     const body = await request.json();
     const { name, type, nit, nrc, dui, phone, email, address } = body;
@@ -31,7 +31,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
-    await requireRole(['Administrador']);
+    await requireRole(['Administrador', 'Supervisor']);
     const { id } = params;
     const result = await pool.query('DELETE FROM clientes WHERE id = $1', [id]);
     if (result.rowCount === 0) {

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
 
     const startOfToday = new Date();
     startOfToday.setHours(0,0,0,0);

@@ -11,13 +11,23 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const body = await request.json();
     const { name, email, password, role, status } = body;
     
+    // Consultar el rol existente del usuario
+    const userRes = await pool.query('SELECT role FROM usuarios WHERE id = $1', [id]);
+    if (userRes.rowCount === 0) {
+      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
+    }
+    const originalRole = userRes.rows[0].role;
+    
+    const allowedRoles = ['Administrador', 'Supervisor', 'Cajero'];
+    const assignedRole = allowedRoles.includes(role) ? role : originalRole;
+    
     let query = `
       UPDATE usuarios
       SET name = $1, email = $2, role = $3, status = $4
       WHERE id = $5
       RETURNING id, name, email, role, status
     `;
-    let paramsArray = [name, email, role, status, id];
+    let paramsArray = [name, email, assignedRole, status, id];
     
     if (password) {
       const hashedPw = await bcrypt.hash(password, 12);
@@ -27,7 +37,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         WHERE id = $6
         RETURNING id, name, email, role, status
       `;
-      paramsArray = [name, email, role, status, hashedPw, id];
+      paramsArray = [name, email, assignedRole, status, hashedPw, id];
     }
     
     const result = await pool.query(query, paramsArray);

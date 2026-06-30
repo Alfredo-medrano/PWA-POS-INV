@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import { runWithTenant } from '@/lib/tenant';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
-import { getResetToken, consumeResetToken } from '@/lib/reset-tokens';
+import { verifyResetToken } from '@/lib/reset-tokens';
+import { decodePayload } from '@/lib/auth-crypto';
 
 // NB-03: 10 reset confirmation attempts per IP every 1 hour
 const RESET_CONFIRM_MAX_ATTEMPTS = 10;
@@ -49,12 +49,35 @@ export async function POST(request: Request) {
     }
     const resolvedTenantId = tenantRes.rows[0].id;
 
-    // Hash the incoming token to compare against the stored hash
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    // Decode token to extract userId
+    let userId: string;
+    try {
+      const parts = token.split('.');
+      const encoded = parts[0];
+      const payload = decodePayload(encoded);
+      userId = payload.userId;
+      if (!userId) throw new Error();
+    } catch (e) {
+      return NextResponse.json(
+        { error: 'El enlace de restablecimiento es inválido o corrupto.' },
+        { status: 400 }
+      );
+    }
 
-    // Retrieve token from in-memory store
-    const tokenRecord = getResetToken(tokenHash);
+    // Fetch user's current password hash in the resolved tenant context
+    const userRes = await runWithTenant(resolvedTenantId, () =>
+      pool.query('SELECT password FROM usuarios WHERE id = $1', [userId])
+    );
+    if (userRes.rowCount === 0) {
+      return NextResponse.json(
+        { error: 'El enlace de restablecimiento es inválido o el usuario no existe.' },
+        { status: 400 }
+      );
+    }
+    const dbPassword = userRes.rows[0].password;
 
+    // Verify token cryptographically and check against the current password hash signature
+    const tokenRecord = await verifyResetToken(token, dbPassword);
     if (!tokenRecord || tokenRecord.tenantId !== resolvedTenantId) {
       return NextResponse.json(
         { error: 'El enlace de restablecimiento es inválido, ha expirado o ya fue utilizado.' },
@@ -67,11 +90,8 @@ export async function POST(request: Request) {
 
     // Update password in DB
     await runWithTenant(resolvedTenantId, () =>
-      pool.query('UPDATE usuarios SET password = $1 WHERE id = $2', [hashedPassword, tokenRecord.userId])
+      pool.query('UPDATE usuarios SET password = $1 WHERE id = $2', [hashedPassword, userId])
     );
-
-    // Invalidate/consume token in memory
-    consumeResetToken(tokenHash);
 
     return NextResponse.json({
       success: true,

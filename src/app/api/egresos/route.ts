@@ -7,7 +7,7 @@ import { handleAuthError } from '@/lib/api-helpers';
 // Obtener egresos registrados hoy
 export async function GET() {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
 
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
@@ -38,7 +38,7 @@ export async function GET() {
 // Registrar un egreso
 export async function POST(request: Request) {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
 
     const body = await request.json();
     const { amount, concept } = body;

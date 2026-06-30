@@ -6,7 +6,7 @@ import { handleAuthError } from '@/lib/api-helpers';
 
 export async function GET() {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
     const result = await pool.query('SELECT * FROM proveedores ORDER BY name ASC');
     return NextResponse.json(result.rows);
   } catch (err: any) {

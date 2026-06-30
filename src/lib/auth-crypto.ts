@@ -11,7 +11,7 @@ interface SessionPayload extends SessionData {
 
 // VULN-04 FIX: Fail hard if SESSION_SECRET is not configured instead of using a guessable default.
 // This prevents production deployments from running with a publicly known secret.
-const SESSION_SECRET = process.env.SESSION_SECRET;
+export const SESSION_SECRET = process.env.SESSION_SECRET;
 if (!SESSION_SECRET) {
   throw new Error(
     'FATAL: SESSION_SECRET environment variable is required. ' +
@@ -34,7 +34,7 @@ function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
     .replace(/=+$/, '');
 }
 
-async function getHmacSignature(payload: string, secret: string): Promise<string> {
+export async function getHmacSignature(payload: string, secret: string): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
   const data = encoder.encode(payload);
@@ -59,7 +59,7 @@ async function getHmacSignature(payload: string, secret: string): Promise<string
  * VULN-06 FIX: Constant-time string comparison to prevent timing attacks.
  * Works in Edge Runtime without Node.js crypto.timingSafeEqual.
  */
-function timingSafeEqual(a: string, b: string): boolean {
+export function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let result = 0;
   for (let i = 0; i < a.length; i++) {
@@ -68,7 +68,7 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-function encodePayload(data: any): string {
+export function encodePayload(data: any): string {
   const json = JSON.stringify(data);
   const bytes = new TextEncoder().encode(json);
   let binary = '';
@@ -81,7 +81,7 @@ function encodePayload(data: any): string {
     .replace(/=+$/, '');
 }
 
-function decodePayload(payload: string): any {
+export function decodePayload(payload: string): any {
   const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);

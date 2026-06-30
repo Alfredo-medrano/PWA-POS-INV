@@ -7,7 +7,7 @@ import { handleAuthError } from '@/lib/api-helpers';
 
 export async function GET(request: Request) {
   try {
-    await requireRole(['Administrador', 'Cajero']);
+    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
     
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50') || 50;
@@ -48,28 +48,41 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireRole(['Administrador', 'Cajero']);
+    const session = await requireRole(['Administrador', 'Supervisor', 'Cajero']);
     
     const body = await request.json();
     const { payMethod, emitDTE, dteType, cart, customer } = body;
     
+    // 0. Validar Idempotency Key
+    const idempotencyKey = request.headers.get('x-idempotency-key') || body.idempotencyKey;
+    if (!idempotencyKey || typeof idempotencyKey !== 'string') {
+      return NextResponse.json({ error: 'La clave de idempotencia es requerida para procesar ventas.' }, { status: 400 });
+    }
+
     if (!cart || !Array.isArray(cart) || cart.length === 0) {
       return NextResponse.json({ error: 'El carrito de compras está vacío' }, { status: 400 });
     }
 
+    // Orden determinista de bloqueo para prevenir deadlocks
+    const sortedCart = [...cart].sort((a, b) =>
+      String(a.product.id).localeCompare(String(b.product.id))
+    );
+
     const client = await pool.connect();
+    let saleId = crypto.randomUUID();
+    let subtotal = 0.00;
+    const verifiedCartItems: any[] = [];
+    
     try {
       await client.query('BEGIN');
 
       // 1. Recalcular total del carrito en el servidor para evitar manipulación de precios
-      let subtotal = 0.00;
-      const verifiedCartItems = [];
-
-      for (const item of cart) {
+      // Usar FOR UPDATE para bloqueo pesimista en orden determinista
+      for (const item of sortedCart) {
         const productId = item.product.id;
         const qty = parseInt(item.qty) || 1;
 
-        const prodRes = await client.query('SELECT id, name, price, stock FROM productos WHERE id = $1', [productId]);
+        const prodRes = await client.query('SELECT id, name, price, stock FROM productos WHERE id = $1 FOR UPDATE', [productId]);
         if (prodRes.rowCount === 0) {
           throw new Error(`Producto no encontrado en inventario: ${productId}`);
         }
@@ -99,20 +112,73 @@ export async function POST(request: Request) {
       const userRes = await client.query('SELECT name FROM usuarios WHERE id = $1', [session.id]);
       const cashierName = userRes.rowCount > 0 ? userRes.rows[0].name : 'Cajero General';
 
-      // 3. Integración DTE (Hacienda) en el Servidor
-      let statusDte = 'idle';
       let controlNum = `DTE-${dteType === 'CF' ? '01' : '03'}-M001-${Math.floor(100000000 + Math.random() * 900000000)}`;
+      let statusDte = emitDTE ? 'processing' : 'idle';
+
+      // 4. Estructurar JSON inicial del DTE
+      const rawDteJson = {
+        cajeroId: session.id,
+        cajeroName: cashierName,
+        identificacion: {
+          version: dteType === 'CF' ? 1 : 3,
+          numeroControl: controlNum,
+          tipoDte: dteType === 'CF' ? '01' : '03',
+          fecEmi: new Date().toISOString().split('T')[0]
+        },
+        detalles: verifiedCartItems.map(item => ({
+          descripcion: item.name,
+          cantidad: item.qty,
+          precioUnitario: item.price,
+          monto: item.price * item.qty
+        })),
+        totales: {
+          subtotal: subtotal,
+          iva: iva,
+          total: calculatedTotal
+        }
+      };
+
+      // 5. Crear el registro de venta con total y idempotency_key
+      await client.query(`
+        INSERT INTO ventas (id, total, pay_method, dte_status, dte_type, customer_id, customer_name, raw_dte_json, idempotency_key)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [saleId, calculatedTotal, payMethod, statusDte, dteType, customer?.id || null, customer?.name || null, JSON.stringify(rawDteJson), idempotencyKey]);
+
+      // 6. Decrementar el stock de los productos
+      for (const item of verifiedCartItems) {
+        await client.query(`
+          UPDATE productos 
+          SET stock = stock - $1, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $2
+        `, [item.qty, item.id]);
+      }
+
+      // 7. Actualizar balance acumulado del cliente
+      if (customer && customer.id) {
+        const today = new Date().toLocaleDateString("es-SV", { day: '2-digit', month: '2-digit', year: 'numeric' });
+        await client.query(`
+          UPDATE clientes
+          SET total = total + $1, last_buy = $2
+          WHERE id = $3
+        `, [calculatedTotal, today, customer.id]);
+      }
+
+      await client.query('COMMIT');
+      client.release();
+
+      // --- TRABAJO FUERA DE LA TRANSACCIÓN (DTE/Hacienda) ---
+      let finalStatusDte = statusDte;
+      let finalControlNum = controlNum;
+      let finalDteJson = { ...rawDteJson };
 
       if (emitDTE) {
-        statusDte = 'contingencia'; // Fallback por defecto si no está configurado o falla
-        
-        // Obtener configuración del emisor (contiene dte_url y dte_key)
-        const configRes = await client.query('SELECT dte_url, dte_key, biz_name FROM configuracion LIMIT 1');
+        // Consultar configuracion
+        const configRes = await pool.query('SELECT dte_url, dte_key FROM configuracion LIMIT 1');
         if (configRes.rowCount > 0) {
           const cfg = configRes.rows[0];
           if (cfg.dte_url && cfg.dte_key) {
             try {
-              let tipoDocumento = '13'; // Default DUI
+              let tipoDocumento = '13';
               let numDocumento = '00000000-0';
               if (customer) {
                 if (customer.nit) {
@@ -146,89 +212,58 @@ export async function POST(request: Request) {
                 }
               };
 
-              // Llamado HTTP externo seguro (server-to-server)
               const dteRes = await axios.post(`${cfg.dte_url}/api/dte/v2/facturar`, dtePayload, {
                 headers: {
                   'Authorization': `Bearer ${cfg.dte_key}`,
                   'Content-Type': 'application/json'
                 },
-                timeout: 5000 // 5s timeout
+                timeout: 5000
               });
 
               if (dteRes.data && dteRes.data.numeroControl) {
-                controlNum = dteRes.data.numeroControl;
-                statusDte = 'success';
+                finalControlNum = dteRes.data.numeroControl;
+                finalStatusDte = 'success';
+                finalDteJson.identificacion.numeroControl = finalControlNum;
               }
             } catch (err: any) {
               console.error('❌ Error llamando a la API DTE de Hacienda, se procede en contingencia:', err.message);
-              statusDte = 'contingencia';
+              finalStatusDte = 'contingencia';
             }
           }
         }
-      }
 
-      // 4. Estructurar JSON del DTE
-      const rawDteJson = {
-        cajeroId: session.id,
-        cajeroName: cashierName,
-        identificacion: {
-          version: dteType === 'CF' ? 1 : 3,
-          numeroControl: controlNum,
-          tipoDte: dteType === 'CF' ? '01' : '03',
-          fecEmi: new Date().toISOString().split('T')[0]
-        },
-        detalles: verifiedCartItems.map(item => ({
-          descripcion: item.name,
-          cantidad: item.qty,
-          precioUnitario: item.price,
-          monto: item.price * item.qty
-        })),
-        totales: {
-          subtotal: subtotal,
-          iva: iva,
-          total: calculatedTotal
-        }
-      };
-
-      // 5. Crear el registro de venta con el total verificado del servidor
-      const saleId = crypto.randomUUID();
-      await client.query(`
-        INSERT INTO ventas (id, total, pay_method, dte_status, dte_type, customer_id, customer_name, raw_dte_json)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `, [saleId, calculatedTotal, payMethod, statusDte, dteType, customer?.id || null, customer?.name || null, JSON.stringify(rawDteJson)]);
-
-      // 6. Decrementar el stock de los productos
-      for (const item of verifiedCartItems) {
-        await client.query(`
-          UPDATE productos 
-          SET stock = stock - $1, updated_at = CURRENT_TIMESTAMP
-          WHERE id = $2
-        `, [item.qty, item.id]);
-      }
-
-      // 7. Actualizar balance acumulado del cliente
-      if (customer && customer.id) {
-        const today = new Date().toLocaleDateString("es-SV", { day: '2-digit', month: '2-digit', year: 'numeric' });
-        await client.query(`
-          UPDATE clientes
-          SET total = total + $1, last_buy = $2
+        // Actualizar el estado de la venta de forma asíncrona/aislada
+        await pool.query(`
+          UPDATE ventas 
+          SET dte_status = $1, raw_dte_json = $2 
           WHERE id = $3
-        `, [calculatedTotal, today, customer.id]);
+        `, [finalStatusDte, JSON.stringify(finalDteJson), saleId]);
       }
 
-      await client.query('COMMIT');
-      return NextResponse.json({ exito: true, id: saleId, controlNum, dteStatus: statusDte }, { status: 201 });
+      return NextResponse.json({ exito: true, id: saleId, controlNum: finalControlNum, dteStatus: finalStatusDte }, { status: 201 });
 
     } catch (err: any) {
       await client.query('ROLLBACK');
+      client.release();
+
+      // Control de error de clave de idempotencia duplicada (código 23505)
+      if (err.code === '23505') {
+        const existingSale = await pool.query('SELECT id, dte_status, raw_dte_json FROM ventas WHERE idempotency_key = $1', [idempotencyKey]);
+        if (existingSale.rowCount > 0) {
+          const sale = existingSale.rows[0];
+          return NextResponse.json({
+            exito: true,
+            id: sale.id,
+            controlNum: sale.raw_dte_json?.identificacion?.numeroControl || '',
+            dteStatus: sale.dte_status
+          }, { status: 200 });
+        }
+      }
+
       console.error('❌ Error procesando transacción de venta:', err.message);
-      // Evitar propagar errores crudos de base de datos a clientes.
-      // Si el error fue lanzado explícitamente por lógica de negocio, se devuelve ese mensaje.
       const isBusinessErr = !err.code && err.message;
       const clientMessage = isBusinessErr ? err.message : 'Error interno al procesar la venta en el servidor.';
       return NextResponse.json({ error: clientMessage }, { status: 500 });
-    } finally {
-      client.release();
     }
   } catch (err: any) {
     const authRes = handleAuthError(err);

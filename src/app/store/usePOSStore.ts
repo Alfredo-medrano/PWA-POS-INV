@@ -670,11 +670,16 @@ export const usePOSStore = create<POSState>()(
       set({ dteStatus: 'processing' });
     }
 
+    const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID 
+      ? crypto.randomUUID() 
+      : Math.random().toString(36).substring(2) + Date.now().toString(36);
+
     const payload = {
       payMethod,
       emitDTE,
       dteType,
       cart,
+      idempotencyKey,
       customer: activeCustomer ? { 
         id: activeCustomer.id, 
         name: activeCustomer.name,
@@ -685,7 +690,11 @@ export const usePOSStore = create<POSState>()(
     };
 
     try {
-      const res = await axios.post('/api/ventas', payload);
+      const res = await axios.post('/api/ventas', payload, {
+        headers: {
+          'x-idempotency-key': idempotencyKey
+        }
+      });
       
       set({ 
         dteStatus: res.data.dteStatus || 'idle',
