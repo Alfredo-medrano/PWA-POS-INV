@@ -16,7 +16,7 @@ export interface Product {
   barcode?: string;
 }
 
-export interface CartItem {
+interface CartItem {
   product: Product;
   qty: number;
 }
@@ -45,7 +45,7 @@ export interface User {
   tenantSlug?: string;
 }
 
-export interface Supplier {
+interface Supplier {
   id: string;
   name: string;
   phone?: string;
@@ -54,7 +54,7 @@ export interface Supplier {
   last_buy?: string;
 }
 
-export interface Purchase {
+interface Purchase {
   id: string;
   supplierId?: string;
   sup: string;
@@ -65,7 +65,7 @@ export interface Purchase {
   items?: any[];
 }
 
-export interface BusinessConfig {
+interface BusinessConfig {
   tenantId?: string;
   tenantSlug?: string;
   bizName: string;
@@ -79,7 +79,7 @@ export interface BusinessConfig {
   tenantStatus?: string;
 }
 
-export interface Sale {
+interface Sale {
   id: string;
   total: number;
   payMethod: string;
@@ -93,7 +93,7 @@ export interface Sale {
   createdAt: string;
 }
 
-export interface DashboardStats {
+interface DashboardStats {
   salesToday: number;
   txCount: number;
   topProduct: string;
@@ -101,13 +101,13 @@ export interface DashboardStats {
   hourly: any[];
 }
 
-export interface ReportsStats {
+interface ReportsStats {
   monthly: any[];
   topProducts: any[];
   corteCaja: any[];
 }
 
-export interface SalePayload {
+interface SalePayload {
   total: number;
   payMethod: string;
   dteStatus: string;

@@ -61,12 +61,14 @@ export async function POST(request: Request) {
     const { name, sku, category, stock, minStock, cost, price, img, barcode } = body;
     const id = crypto.randomUUID();
 
-    await runWithTenant(session.tenantId, () =>
-      pool.query(`
-        INSERT INTO productos (id, name, sku, category, stock, min_stock, cost, price, img, barcode)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      `, [id, name, sku, category, parseInt(stock) || 0, parseInt(minStock) || 0, parseFloat(cost) || 0, parseFloat(price) || 0, img || null, barcode || null])
-    );
+    // FIXED: Explicitly insert tenant_id in the query to avoid RLS/Default evaluation issues 
+    // when connection pooler or pg-pool async context is momentarily lost after a timeout.
+    await runWithTenant(session.tenantId, async () => {
+      await pool.query(`
+        INSERT INTO productos (id, name, sku, category, stock, min_stock, cost, price, img, barcode, tenant_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [id, name, sku, category, parseInt(stock) || 0, parseInt(minStock) || 0, parseFloat(cost) || 0, parseFloat(price) || 0, img || null, barcode || null, session.tenantId]);
+    });
 
     return NextResponse.json({ id, name, sku, category, stock, minStock, cost, price, img, barcode }, { status: 201 });
   } catch (err: any) {

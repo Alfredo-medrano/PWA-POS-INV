@@ -67,16 +67,6 @@ export function Input({ id, label, hint, type = "text", placeholder, value, onCh
   );
 }
 
-// ─── Toggle ───────────────────────────────────────────────────────────────────
-export function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
-  return (
-    <button onClick={onToggle} role="switch" aria-checked={on}
-      className={`relative w-10 h-6 rounded-full transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/30 ${on ? "bg-[#1B4FD8]" : "bg-slate-200"}`}>
-      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-200 ${on ? "left-5" : "left-1"}`} />
-    </button>
-  );
-}
-
 // ─── KPI ──────────────────────────────────────────────────────────────────────
 export function KPI({ icon: Icon, value, label, trend, trendUp, warn, onClick }: {
   icon: React.ElementType; value: string; label: string;
@@ -101,11 +91,6 @@ export function KPI({ icon: Icon, value, label, trend, trendUp, warn, onClick }:
       <p className="text-xs text-[#64748B] font-medium">{label}</p>
     </button>
   );
-}
-
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`bg-slate-100 rounded-lg animate-pulse ${className}`} />;
 }
 
 // ─── Moneda Format Helper ──────────────────────────────────────────────────────

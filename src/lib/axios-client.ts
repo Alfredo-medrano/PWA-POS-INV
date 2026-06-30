@@ -9,7 +9,13 @@ axiosInstance.interceptors.response.use(
   res => res,
   err => {
     if (err.response?.status === 401) {
-      if (typeof window !== 'undefined') {
+      // Solo redirigir al login si ya había una sesión activa (token expirado, revocado, etc.)
+      // NO redirigir en intentos de login/register fallidos — esos 401 son esperados.
+      const isAuthEndpoint =
+        err.config?.url?.includes('/api/auth/') ||
+        err.config?.url?.includes('/api/setup/');
+
+      if (!isAuthEndpoint && typeof window !== 'undefined') {
         usePOSStore.getState().logout();
         window.location.href = '/';
       }

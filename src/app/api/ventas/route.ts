@@ -67,6 +67,21 @@ export async function POST(request: Request) {
 
     const hasIdempotencyKeyCol = await checkColumnExists('ventas', 'idempotency_key');
 
+    if (!cart || !Array.isArray(cart) || cart.length === 0) {
+      return NextResponse.json({ error: 'El carrito de compras está vacío' }, { status: 400 });
+    }
+
+    // Orden determinista de bloqueo para prevenir deadlocks
+    const sortedCart = [...cart].sort((a, b) =>
+      String(a.product.id).localeCompare(String(b.product.id))
+    );
+
+    // Wrap the entire transaction in runWithTenant so the pool Proxy sets
+    // app.current_tenant_id before any query fires (activating RLS policies).
+    // FIX P5: La verificación de idempotencia también se mueve aquí para que
+    // la query sobre ventas corra bajo el RLS del tenant correcto.
+    return await runWithTenant(session.tenantId, async () => {
+
     // Si la columna no existe, hacemos la verificación manual antes de insertar
     if (!hasIdempotencyKeyCol) {
       const dupRes = await pool.query(
@@ -84,18 +99,6 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!cart || !Array.isArray(cart) || cart.length === 0) {
-      return NextResponse.json({ error: 'El carrito de compras está vacío' }, { status: 400 });
-    }
-
-    // Orden determinista de bloqueo para prevenir deadlocks
-    const sortedCart = [...cart].sort((a, b) =>
-      String(a.product.id).localeCompare(String(b.product.id))
-    );
-
-    // Wrap the entire transaction in runWithTenant so the pool Proxy sets
-    // app.current_tenant_id before any query fires (activating RLS policies).
-    return await runWithTenant(session.tenantId, async () => {
     const client = await pool.connect();
     let saleId = crypto.randomUUID();
     let subtotal = 0.00;

@@ -40,11 +40,14 @@ export async function POST(request: Request) {
     `, [tenantId, bizName, slug, trialEndsAt]);
 
     // 3. Crear configuración, administrador y sembrar datos opcionales dentro de su contexto
-    const client = await pool.connect();
     const adminId = crypto.randomUUID();
-    try {
-      // runWithTenant asegura que el tenant_id actual esté fijado en el almacenamiento local asíncrono
-      await runWithTenant(tenantId, async () => {
+
+    // runWithTenant asegura que el tenant_id actual esté fijado en el almacenamiento local asíncrono.
+    // Toda la lógica de conexión y transacción debe ocurrir dentro para que getTenantId() resuelva
+    // correctamente durante el pool.connect() del proxy.
+    const response = await runWithTenant(tenantId, async () => {
+      const client = await pool.connect();
+      try {
         await client.query('BEGIN');
 
         // Insertar configuración (usando tenantId como id único de configuración)
@@ -113,10 +116,15 @@ export async function POST(request: Request) {
         }
 
         await client.query('COMMIT');
-      });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
 
       // Crear sesión automática tras el registro
-      const response = NextResponse.json({
+      const res = NextResponse.json({
         success: true,
         tenantSlug: slug,
         user: {
@@ -130,20 +138,17 @@ export async function POST(request: Request) {
         }
       }, { status: 201 });
 
-      response.cookies.set('pos_session', await signSession({ id: adminId, role: 'Administrador', tenantId }), {
+      res.cookies.set('pos_session', await signSession({ id: adminId, role: 'Administrador', tenantId }), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/'
       });
 
-      return response;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+      return res;
+    });
+
+    return response;
   } catch (err: any) {
     console.error('Error al registrar negocio y admin inicial:', err);
     if (err.code === '23505') {

@@ -1,12 +1,14 @@
 import { Pool } from 'pg';
 import { getTenantId } from './tenant';
 
+// DATABASE_URL → pos_app_user: usuario restringido, RLS activo, usado por toda la app
 const connectionString = process.env.DATABASE_URL;
 
-let rawPool: Pool;
+// MIGRATION_DATABASE_URL → neondb_owner: owner de las tablas, solo para DDL en initDatabase()
+// Si no está definido (deploy sin configurar), cae a DATABASE_URL como fallback de último recurso
+const migrationConnectionString = process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL;
 
-const poolConfig = {
-  connectionString,
+const baseConfig = {
   ssl: {
     rejectUnauthorized: false,
   },
@@ -15,18 +17,35 @@ const poolConfig = {
   connectionTimeoutMillis: 2000,
 };
 
+// Pool principal de la app: pos_app_user con RLS activo
+let rawPool: Pool;
+
 if (process.env.NODE_ENV === 'production') {
-  rawPool = new Pool(poolConfig);
+  rawPool = new Pool({ ...baseConfig, connectionString });
 } else {
   if (!(global as any).pool) {
-    (global as any).pool = new Pool(poolConfig);
+    (global as any).pool = new Pool({ ...baseConfig, connectionString });
   }
   rawPool = (global as any).pool;
 }
 
+// Pool exclusivo para migraciones DDL: neondb_owner
+// Nunca se expone a queries de la app; solo lo usa initDatabase()
+let migrationPool: Pool;
+
+if (process.env.NODE_ENV === 'production') {
+  migrationPool = new Pool({ ...baseConfig, connectionString: migrationConnectionString });
+} else {
+  if (!(global as any).migrationPool) {
+    (global as any).migrationPool = new Pool({ ...baseConfig, connectionString: migrationConnectionString });
+  }
+  migrationPool = (global as any).migrationPool;
+}
+
 // Inicializar tablas e incorporar columnas nuevas con multitenancy y RLS
 async function initDatabase() {
-  const client = await rawPool.connect();
+  // Usar migrationPool (neondb_owner) para DDL: ALTER TABLE, FORCE RLS, CREATE POLICY
+  const client = await migrationPool.connect();
 
   const failedSteps: { label: string; code: string; message: string }[] = [];
   const PERMISSION_CODES = new Set(['42501', '42P01']);
@@ -321,22 +340,26 @@ async function initDatabase() {
 // Ejecutar migración de forma asíncrona sin bloquear la importación
 initDatabase().catch(err => console.error("Error al iniciar DB:", err));
 
-// Crear Proxy sobre rawPool para inyectar automáticamente el tenant_id en RLS
+// Crear Proxy sobre rawPool para inyectar automáticamente el tenant_id en RLS.
+//
+// DISEÑO DE SEGURIDAD:
+// - pool.query() SIEMPRE pasa por receiver.connect() del Proxy para garantizar que
+//   app.current_tenant_id esté seteado/limpiado antes de cualquier query.
+//   Se eliminó el fallback silencioso a target.query() que bypasseaba el Proxy.
+// - pool.connect() SIEMPRE setea o limpia el GUC incondicionalmente en cada checkout
+//   de conexión, eliminando el riesgo de "contexto pegado" entre requests por la
+//   reutilización de conexiones físicas del pool (set_config es nivel sesión en pg).
 const pool = new Proxy(rawPool, {
   get(target, prop, receiver) {
     if (prop === 'query') {
+      // FIX P1: Eliminar fallback a target.query() — todo pasa por receiver.connect()
+      // para que el GUC siempre sea seteado/limpiado antes de ejecutar la query.
       return async function(text: any, params?: any[]) {
-        const tenantId = getTenantId();
-        if (tenantId) {
-          // Obtener un cliente del proxy (lo que invoca el método connect envuelto abajo)
-          const client = await receiver.connect();
-          try {
-            return await client.query(text, params);
-          } finally {
-            client.release();
-          }
-        } else {
-          return target.query(text, params);
+        const client = await receiver.connect();
+        try {
+          return await client.query(text, params);
+        } finally {
+          client.release();
         }
       };
     }
@@ -346,16 +369,14 @@ const pool = new Proxy(rawPool, {
         const tenantId = getTenantId();
         
         try {
+          // FIX P2: Setear/limpiar GUC incondicionalmente en cada checkout.
+          // Se eliminó la guarda _lastTenantId porque set_config(..., false) es
+          // de nivel sesión y persiste en la conexión física reciclada. No cachear.
           if (tenantId) {
-            if ((client as any)._lastTenantId !== tenantId) {
-              await client.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenantId]);
-              (client as any)._lastTenantId = tenantId;
-            }
+            await client.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenantId]);
           } else {
-            if ((client as any)._lastTenantId !== undefined) {
-              await client.query(`SELECT set_config('app.current_tenant_id', '', false)`);
-              delete (client as any)._lastTenantId;
-            }
+            // Sin tenant: limpiar explícitamente para no heredar contexto residual
+            await client.query(`SELECT set_config('app.current_tenant_id', '', false)`);
           }
         } catch (err) {
           client.release();

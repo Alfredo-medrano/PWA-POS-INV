@@ -1,8 +1,7 @@
 import { headers } from 'next/headers';
-import { verifySession, signSession, SessionData } from './auth-crypto';
+import { SessionData } from './auth-crypto';
 
 export type { SessionData };
-export { verifySession, signSession };
 
 // Retrieve verified session in server context (Server components/API routes)
 export function getSession(): SessionData | null {

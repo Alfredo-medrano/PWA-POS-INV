@@ -6,7 +6,7 @@ import {
   decodePayload 
 } from './auth-crypto';
 
-export interface ResetTokenPayload {
+interface ResetTokenPayload {
   userId: string;
   tenantId: string;
   passSig: string;
