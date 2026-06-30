@@ -3,8 +3,9 @@ import {
   Search, Camera, Package, Plus, Minus, Check,
   AlertTriangle, Printer, MessageSquare, Mail, User,
   Building2, ShoppingCart, Trash2, XCircle, CheckCircle,
-  CreditCard, Banknote, Smartphone, RefreshCw
+  CreditCard, Banknote, Smartphone, RefreshCw, DollarSign
 } from "lucide-react";
+import axios from "axios";
 import { toast } from "sonner";
 import { usePOSStore } from "../store/usePOSStore";
 import { Btn, Input, Badge, $, status, CATS } from "../components/Primitives";
@@ -21,6 +22,7 @@ export default function POS({ dteConnected }: { dteConnected: boolean }) {
     dteType,
     dteStatus,
     recentDteControl,
+    recentSaleId,
     fetchProducts,
     fetchCustomers,
     addProduct,
@@ -41,6 +43,38 @@ export default function POS({ dteConnected }: { dteConnected: boolean }) {
   const [showDrop, setShowDrop] = useState(false);
   const [modal, setModal] = useState(false);
   const [mobTab, setMobTab] = useState<"productos" | "carrito">("productos");
+
+  // Registrar egreso rápido
+  const [showEgresoModal, setShowEgresoModal] = useState(false);
+  const [egresoAmount, setEgresoAmount] = useState("");
+  const [egresoConcept, setEgresoConcept] = useState("");
+  const [submittingEgreso, setSubmittingEgreso] = useState(false);
+
+  async function handleAddEgreso(e: React.FormEvent) {
+    e.preventDefault();
+    if (!egresoAmount || !egresoConcept) {
+      toast.error("Completa el monto y el concepto del egreso.");
+      return;
+    }
+    const amt = parseFloat(egresoAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error("El monto debe ser un número positivo.");
+      return;
+    }
+    setSubmittingEgreso(true);
+    try {
+      await axios.post("/api/egresos", { amount: amt, concept: egresoConcept });
+      toast.success("Egreso registrado con éxito.");
+      setEgresoAmount("");
+      setEgresoConcept("");
+      setShowEgresoModal(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Error al registrar egreso.");
+    } finally {
+      setSubmittingEgreso(false);
+    }
+  }
   
   const dropRef = useRef<HTMLDivElement>(null);
 
@@ -143,7 +177,12 @@ export default function POS({ dteConnected }: { dteConnected: boolean }) {
     <div className="flex flex-col h-full bg-white border-l border-[#E2E8F0]">
       {/* Customer select */}
       <div className="p-3 border-b border-[#E2E8F0] relative" ref={dropRef}>
-        <label className="text-[10px] font-black text-[#CBD5E1] uppercase tracking-wider block mb-1">Cliente</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-[10px] font-black text-[#CBD5E1] uppercase tracking-wider block">Cliente</label>
+          <button onClick={() => setShowEgresoModal(true)} className="text-[10px] font-bold text-red-600 hover:text-red-700 hover:underline flex items-center gap-1 transition-all">
+            <DollarSign size={10} /> Registrar Egreso
+          </button>
+        </div>
         <div className="flex items-center gap-1.5">
           <div className="relative flex-1">
             <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#CBD5E1]" />
@@ -318,13 +357,62 @@ export default function POS({ dteConnected }: { dteConnected: boolean }) {
                 </div>
               )}
               {/* Actions */}
-              <div className="grid grid-cols-3 gap-2">
-                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto" onClick={() => toast.info("Próximamente: La impresión de tickets estará disponible al conectar una impresora térmica.")}><Printer size={14} />Imprimir</Btn>
-                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto" onClick={() => toast.info("Próximamente: El envío por WhatsApp estará disponible en una actualización futura.")}><MessageSquare size={14} />WhatsApp</Btn>
-                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto" onClick={() => toast.info("Próximamente: El envío por correo electrónico estará disponible en una actualización futura.")}><Mail size={14} />Correo</Btn>
+              <div className="grid grid-cols-2 gap-2">
+                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto" onClick={() => recentSaleId && window.open(`/api/ventas/${recentSaleId}/pdf`, '_blank')}><Printer size={14} />Imprimir</Btn>
+                <Btn v="secondary" sz="sm" className="flex-col gap-1.5 py-3 h-auto" onClick={async () => {
+                  if (!recentSaleId) return;
+                  const email = prompt("Ingresa el correo del cliente para enviar el comprobante:", activeCustomer?.email || "");
+                  if (email) {
+                    try {
+                      toast.promise(
+                        axios.post(`/api/ventas/${recentSaleId}/pdf`, { email }),
+                        {
+                          loading: 'Enviando comprobante...',
+                          success: 'Comprobante enviado con éxito.',
+                          error: 'Error al enviar comprobante.'
+                        }
+                      );
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }
+                }}><Mail size={14} />Correo</Btn>
               </div>
               <Btn v="primary" full onClick={handleReset}>Nueva venta</Btn>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Quick Egreso Modal */}
+      {showEgresoModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xl w-full max-w-sm p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-[#0F172A]">Registrar Egreso de Caja</h3>
+              <button onClick={() => setShowEgresoModal(false)} className="text-[#94A3B8] hover:text-[#0F172A] font-bold text-lg">×</button>
+            </div>
+
+            <form onSubmit={handleAddEgreso} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-[#0F172A] block mb-1.5">Concepto / Descripción *</label>
+                <input type="text" value={egresoConcept} onChange={e => setEgresoConcept(e.target.value)} required placeholder="Ej. Pago de flete, Envío..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-[#0F172A] block mb-1.5">Monto ($) *</label>
+                <div className="relative">
+                  <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+                  <input type="number" step="0.01" min="0.01" value={egresoAmount} onChange={e => setEgresoAmount(e.target.value)} required placeholder="0.00"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none" />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Btn v="secondary" type="button" className="flex-1 justify-center" onClick={() => setShowEgresoModal(false)}>Cancelar</Btn>
+                <Btn v="primary" type="submit" disabled={submittingEgreso} className="flex-1 justify-center">
+                  {submittingEgreso ? "Registrando..." : "Registrar"}
+                </Btn>
+              </div>
+            </form>
           </div>
         </div>
       )}

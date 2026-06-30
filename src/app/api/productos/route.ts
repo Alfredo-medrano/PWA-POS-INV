@@ -4,10 +4,23 @@ import crypto from 'crypto';
 import { requireRole } from '@/lib/auth';
 import { handleAuthError } from '@/lib/api-helpers';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await requireRole(['Administrador', 'Supervisor', 'Cajero']);
-    const result = await pool.query('SELECT * FROM productos ORDER BY name ASC');
+
+    const { searchParams } = new URL(request.url);
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit') || '') : null;
+    const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset') || '') : 0;
+
+    let queryText = 'SELECT * FROM productos ORDER BY name ASC';
+    const params: any[] = [];
+
+    if (limit !== null && !isNaN(limit)) {
+      queryText += ' LIMIT $1 OFFSET $2';
+      params.push(limit, isNaN(offset) ? 0 : offset);
+    }
+
+    const result = await pool.query(queryText, params);
     const prods = result.rows.map(r => ({
       id: r.id,
       name: r.name,
@@ -20,6 +33,13 @@ export async function GET() {
       img: r.img,
       barcode: r.barcode
     }));
+
+    if (limit !== null) {
+      const countRes = await pool.query('SELECT COUNT(*) FROM productos');
+      const total = parseInt(countRes.rows[0].count);
+      return NextResponse.json({ products: prods, total });
+    }
+
     return NextResponse.json(prods);
   } catch (err: any) {
     const authRes = handleAuthError(err);

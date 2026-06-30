@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import axios from 'axios';
+import axios from '@/lib/axios-client';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 export interface Product {
@@ -128,6 +128,7 @@ interface POSState {
   dteType: 'CF' | 'CCF';
   dteStatus: 'idle' | 'processing' | 'success' | 'contingencia';
   recentDteControl: string;
+  recentSaleId: string;
   loadingProducts: boolean;
   loadingCustomers: boolean;
 
@@ -197,10 +198,12 @@ interface POSState {
   fetchPurchases: () => Promise<void>;
   createPurchase: (purchase: { supplierId: string, supplierName: string, items: any[], status: string, total: number }) => Promise<boolean>;
   receivePurchase: (id: string) => Promise<boolean>;
+  updatePurchase: (id: string, purchase: { supplierId: string, supplierName: string, items: any[], status: string, total: number }) => Promise<boolean>;
+  deletePurchase: (id: string) => Promise<boolean>;
 
   fetchDashboardStats: () => Promise<void>;
   fetchReportsStats: (period?: string) => Promise<void>;
-  fetchSales: () => Promise<void>;
+  fetchSales: (limit?: number, offset?: number) => Promise<void>;
   
   // Acciones de Inicialización/Setup
   setupStatus: { isConfigured: boolean; hasUsers: boolean } | null;
@@ -223,6 +226,7 @@ export const usePOSStore = create<POSState>()(
       dteType: 'CF',
       dteStatus: 'idle',
       recentDteControl: '',
+      recentSaleId: '',
       loadingProducts: false,
       loadingCustomers: false,
 
@@ -606,8 +610,31 @@ export const usePOSStore = create<POSState>()(
   receivePurchase: async (id) => {
     try {
       await axios.put(`/api/compras/${id}/recepcion`);
-      await get().fetchPurchases();
-      await get().fetchProducts();
+      get().fetchPurchases();
+      // Recargar productos ya que se actualizó el stock
+      get().fetchProducts();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  updatePurchase: async (id, purchase) => {
+    try {
+      await axios.put(`/api/compras/${id}`, purchase);
+      get().fetchPurchases();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  deletePurchase: async (id) => {
+    try {
+      await axios.delete(`/api/compras/${id}`);
+      get().fetchPurchases();
       return true;
     } catch (err) {
       console.error(err);
@@ -650,10 +677,10 @@ export const usePOSStore = create<POSState>()(
     }
   },
 
-  fetchSales: async () => {
+  fetchSales: async (limit = 10, offset = 0) => {
     set({ loadingSales: true });
     try {
-      const res = await axios.get('/api/ventas?limit=100');
+      const res = await axios.get(`/api/ventas?limit=${limit}&offset=${offset}`);
       set({ sales: res.data.sales || [], salesTotalCount: res.data.total || 0, loadingSales: false });
     } catch (err) {
       console.error(err);
@@ -698,7 +725,8 @@ export const usePOSStore = create<POSState>()(
       
       set({ 
         dteStatus: res.data.dteStatus || 'idle',
-        recentDteControl: res.data.controlNum || ''
+        recentDteControl: res.data.controlNum || '',
+        recentSaleId: res.data.id || ''
       });
 
       await get().fetchProducts();

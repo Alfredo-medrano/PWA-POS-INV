@@ -14,7 +14,11 @@ export default function Purchases() {
     fetchProducts,
     createSupplier,
     createPurchase,
-    receivePurchase
+    receivePurchase,
+    updateSupplier,
+    deleteSupplier,
+    updatePurchase,
+    deletePurchase
   } = usePOSStore();
 
   const [tab, setTab] = useState<"ordenes" | "proveedores">("ordenes");
@@ -36,21 +40,52 @@ export default function Purchases() {
   const [addQty, setAddQty] = useState("10");
   const [addCost, setAddCost] = useState("1.00");
 
+  // Editing state
+  const [editingSup, setEditingSup] = useState<any>(null);
+  const [editingPur, setEditingPur] = useState<any>(null);
+
   useEffect(() => {
     fetchSuppliers();
     fetchPurchases();
     fetchProducts();
   }, []);
 
+  function startEditSupplier(sup: any) {
+    setEditingSup(sup);
+    setNewSup({ name: sup.name, phone: sup.phone || "", nrc: sup.nrc || "", email: sup.email || "" });
+    setSupOpen(true);
+  }
+
+  function closeSupplierModal() {
+    setSupOpen(false);
+    setEditingSup(null);
+    setNewSup({ name: "", phone: "", nrc: "", email: "" });
+  }
+
   async function handleSaveSupplier() {
     if (!newSup.name) return;
-    const ok = await createSupplier(newSup);
-    if (ok) {
-      toast.success("Proveedor registrado con éxito.");
-      setSupOpen(false);
-      setNewSup({ name: "", phone: "", nrc: "", email: "" });
+    let ok = false;
+    if (editingSup) {
+      ok = await updateSupplier(editingSup.id, newSup);
     } else {
-      toast.error("Error al registrar proveedor.");
+      ok = await createSupplier(newSup);
+    }
+    if (ok) {
+      toast.success(editingSup ? "Proveedor actualizado con éxito." : "Proveedor registrado con éxito.");
+      closeSupplierModal();
+    } else {
+      toast.error("Error al guardar proveedor.");
+    }
+  }
+
+  async function handleDeleteSupplier(id: string) {
+    if (confirm("¿Estás seguro de eliminar este proveedor?")) {
+      const ok = await deleteSupplier(id);
+      if (ok) {
+        toast.success("Proveedor eliminado con éxito.");
+      } else {
+        toast.error("Error al eliminar proveedor.");
+      }
     }
   }
 
@@ -83,6 +118,22 @@ export default function Purchases() {
     setPurchaseItems(purchaseItems.filter(i => i.productId !== productId));
   }
 
+  function startEditPurchase(pur: any) {
+    setEditingPur(pur);
+    setSelectedSupId(pur.supplierId || "");
+    setPurchaseItems(pur.items || []);
+    setPurchaseStatus(pur.s as "Pendiente" | "Recibida");
+    setPurOpen(true);
+  }
+
+  function closePurchaseModal() {
+    setPurOpen(false);
+    setEditingPur(null);
+    setSelectedSupId("");
+    setPurchaseItems([]);
+    setPurchaseStatus("Pendiente");
+  }
+
   async function handleSavePurchase() {
     if (!selectedSupId || purchaseItems.length === 0) {
       toast.error("Por favor selecciona un proveedor y agrega al menos un producto.");
@@ -93,22 +144,41 @@ export default function Purchases() {
 
     const total = purchaseItems.reduce((sum, item) => sum + item.cost * item.qty, 0);
 
-    const ok = await createPurchase({
-      supplierId: supplier.id,
-      supplierName: supplier.name,
-      items: purchaseItems,
-      status: purchaseStatus,
-      total
-    });
+    let ok = false;
+    if (editingPur) {
+      ok = await updatePurchase(editingPur.id, {
+        supplierId: supplier.id,
+        supplierName: supplier.name,
+        items: purchaseItems,
+        status: purchaseStatus,
+        total
+      });
+    } else {
+      ok = await createPurchase({
+        supplierId: supplier.id,
+        supplierName: supplier.name,
+        items: purchaseItems,
+        status: purchaseStatus,
+        total
+      });
+    }
 
     if (ok) {
-      toast.success("Orden de compra registrada con éxito.");
-      setPurOpen(false);
-      setSelectedSupId("");
-      setPurchaseItems([]);
-      setPurchaseStatus("Pendiente");
+      toast.success(editingPur ? "Orden de compra actualizada con éxito." : "Orden de compra registrada con éxito.");
+      closePurchaseModal();
     } else {
-      toast.error("Error al registrar orden de compra.");
+      toast.error("Error al guardar orden de compra.");
+    }
+  }
+
+  async function handleDeletePurchase(id: string) {
+    if (confirm("¿Estás seguro de cancelar y eliminar esta orden de compra?")) {
+      const ok = await deletePurchase(id);
+      if (ok) {
+        toast.success("Orden de compra eliminada con éxito.");
+      } else {
+        toast.error("Error al cancelar orden de compra.");
+      }
     }
   }
 
@@ -170,11 +240,21 @@ export default function Purchases() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      {o.s === "Pendiente" && (
-                        <Btn v="success" sz="xs" onClick={() => handleReceivePurchase(o.id)}>
-                          <CheckCircle2 size={11} /> Recibir
-                        </Btn>
-                      )}
+                      <div className="flex gap-2 items-center">
+                        {o.s === "Pendiente" && (
+                          <>
+                            <Btn v="success" sz="xs" onClick={() => handleReceivePurchase(o.id)}>
+                              <CheckCircle2 size={11} /> Recibir
+                            </Btn>
+                            <button onClick={() => startEditPurchase(o)} className="p-1 text-[#64748B] hover:text-[#1B4FD8] transition-colors" title="Editar Orden">
+                              <Edit size={14} />
+                            </button>
+                            <button onClick={() => handleDeletePurchase(o.id)} className="p-1 text-red-500 hover:text-red-700 transition-colors" title="Cancelar Orden">
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -193,7 +273,7 @@ export default function Purchases() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-[#E2E8F0]">
                 <tr>
-                  {["Nombre", "Teléfono", "NRC", "Correo", "Última compra"].map(h => (
+                  {["Nombre", "Teléfono", "NRC", "Correo", "Última compra", "Acciones"].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-bold text-[#94A3B8] tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -206,11 +286,21 @@ export default function Purchases() {
                     <td className="px-4 py-3 font-mono text-[#64748B]">{s.nrc || "—"}</td>
                     <td className="px-4 py-3 text-[#64748B]">{s.email || "—"}</td>
                     <td className="px-4 py-3 text-[#64748B]">{s.last_buy || "—"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <button onClick={() => startEditSupplier(s)} className="p-1 text-[#64748B] hover:text-[#1B4FD8] transition-colors" title="Editar Proveedor">
+                          <Edit size={14} />
+                        </button>
+                        <button onClick={() => handleDeleteSupplier(s.id)} className="p-1 text-red-500 hover:text-red-700 transition-colors" title="Eliminar Proveedor">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {suppliers.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-sm text-[#94A3B8]">No hay proveedores registrados.</td>
+                    <td colSpan={6} className="text-center py-8 text-sm text-[#94A3B8]">No hay proveedores registrados.</td>
                   </tr>
                 )}
               </tbody>
@@ -222,11 +312,11 @@ export default function Purchases() {
       {/* NEW SUPPLIER MODAL */}
       {supOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSupOpen(false)} />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeSupplierModal} />
           <div className="relative bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
             <div className="flex justify-between items-center">
-              <h3 className="font-black text-[#0F172A] text-base">Nuevo Proveedor</h3>
-              <button onClick={() => setSupOpen(false)} className="text-[#94A3B8] hover:text-[#64748B]"><X size={16} /></button>
+              <h3 className="font-black text-[#0F172A] text-base">{editingSup ? "Editar Proveedor" : "Nuevo Proveedor"}</h3>
+              <button onClick={closeSupplierModal} className="text-[#94A3B8] hover:text-[#64748B]"><X size={16} /></button>
             </div>
             <div className="space-y-4">
               <Input label="Razón Social / Nombre *" placeholder="Distribuidora Central" value={newSup.name} onChange={v => setNewSup(f => ({ ...f, name: v }))} />
@@ -235,21 +325,21 @@ export default function Purchases() {
               <Input label="Correo electrónico" placeholder="ventas@proveedor.com" value={newSup.email} onChange={v => setNewSup(f => ({ ...f, email: v }))} />
             </div>
             <div className="flex gap-2">
-              <Btn v="secondary" className="flex-1" onClick={() => setSupOpen(false)}>Cancelar</Btn>
-              <Btn v="primary" className="flex-1" onClick={handleSaveSupplier} disabled={!newSup.name}>Registrar</Btn>
+              <Btn v="secondary" className="flex-1" onClick={closeSupplierModal}>Cancelar</Btn>
+              <Btn v="primary" className="flex-1" onClick={handleSaveSupplier} disabled={!newSup.name}>{editingSup ? "Actualizar" : "Registrar"}</Btn>
             </div>
           </div>
         </div>
       )}
 
-      {/* NEW PURCHASE MODAL */}
+      /* NEW PURCHASE MODAL */
       {purOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPurOpen(false)} />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closePurchaseModal} />
           <div className="relative bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center">
-              <h3 className="font-black text-[#0F172A] text-base">Nueva Orden de Compra</h3>
-              <button onClick={() => setPurOpen(false)} className="text-[#94A3B8] hover:text-[#64748B]"><X size={16} /></button>
+              <h3 className="font-black text-[#0F172A] text-base">{editingPur ? "Editar Orden de Compra" : "Nueva Orden de Compra"}</h3>
+              <button onClick={closePurchaseModal} className="text-[#94A3B8] hover:text-[#64748B]"><X size={16} /></button>
             </div>
             <div className="space-y-4 overflow-y-auto pr-1 flex-1 scrollbar-thin">
               {/* Proveedor select */}
@@ -329,9 +419,9 @@ export default function Purchases() {
             </div>
 
             <div className="flex gap-2 pt-2 border-t border-[#E2E8F0]">
-              <Btn v="secondary" className="flex-1" onClick={() => setPurOpen(false)}>Cancelar</Btn>
+              <Btn v="secondary" className="flex-1" onClick={closePurchaseModal}>Cancelar</Btn>
               <Btn v="primary" className="flex-1" onClick={handleSavePurchase} disabled={!selectedSupId || purchaseItems.length === 0}>
-                Registrar OC
+                {editingPur ? "Actualizar OC" : "Registrar OC"}
               </Btn>
             </div>
           </div>

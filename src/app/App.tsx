@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import axios from "@/lib/axios-client";
 import { toast } from "sonner";
 import {
   LayoutDashboard, ShoppingCart, Package, Tag, Truck, Users, User as UserIcon,
@@ -193,6 +193,12 @@ function Layout({ page, onNav, children, dte, slim, onSlim }: {
         </div>
       )}
       <main className={`pt-[60px] pb-16 md:pb-0 ${pad} transition-[padding] duration-200`}>
+        {usePOSStore.getState().config?.trialExpired && (
+          <div className="bg-amber-500 text-white px-4 py-2.5 text-xs font-bold flex items-center justify-center gap-2 border-b border-amber-600 shadow-sm">
+            <Clock size={14} className="animate-pulse" />
+            <span>Licencia Demo Expirada. Tu cuenta de Administrador mantiene acceso, pero los Cajeros y Supervisores están bloqueados.</span>
+          </div>
+        )}
         <div className="p-4 md:p-6 max-w-[1400px] mx-auto">{children}</div>
       </main>
       <BottomNav page={page} onNav={onNav} />
@@ -635,7 +641,7 @@ export default function App({ tenantId }: { tenantId?: string }) {
       } else {
         const currentStoreConfig = usePOSStore.getState().config;
         
-        if (currentStoreConfig?.trialExpired || currentStoreConfig?.tenantStatus === 'suspended') {
+        if ((currentStoreConfig?.trialExpired || currentStoreConfig?.tenantStatus === 'suspended') && user?.role !== 'Administrador') {
           setPage("trialExpired");
         } else if (user && (user.tenantId === currentStoreConfig?.tenantId || user.tenantId === currentStoreConfig?.tenantSlug)) {
           setPage("dashboard");

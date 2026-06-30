@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   try {
     // NB-03 Rate Limit Check
     const ip = getClientIp(request);
-    const rateLimit = checkRateLimit(`reset-confirm:${ip}`, RESET_CONFIRM_MAX_ATTEMPTS, RESET_CONFIRM_WINDOW_MS);
+    const rateLimit = await checkRateLimit(`reset-confirm:${ip}`, RESET_CONFIRM_MAX_ATTEMPTS, RESET_CONFIRM_WINDOW_MS);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Demasiados intentos. Intenta de nuevo más tarde.' },

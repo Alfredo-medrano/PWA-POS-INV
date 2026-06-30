@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import axios from "@/lib/axios-client";
 import { toast } from "sonner";
 import {
   Zap, Users, Receipt, Printer, Globe, Lock, Activity,
@@ -57,9 +57,25 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "Cajero", status: "Activo" });
 
+  const [roleMatrix, setRoleMatrix] = useState<any[]>([]);
+  const [loadingMatrix, setLoadingMatrix] = useState(false);
+
+  async function fetchRoleMatrix() {
+    setLoadingMatrix(true);
+    try {
+      const res = await axios.get("/api/roles/matrix");
+      setRoleMatrix(res.data || []);
+    } catch (err) {
+      console.error("Error al obtener la matriz de roles:", err);
+    } finally {
+      setLoadingMatrix(false);
+    }
+  }
+
   useEffect(() => {
     fetchConfig();
     fetchUsers();
+    fetchRoleMatrix();
   }, []);
 
   // Sync inputs with config loaded from database
@@ -358,21 +374,58 @@ export default function Config({ dteConnected, setDteConnected }: { dteConnected
                 </table>
               </div>
               <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-5 overflow-x-auto">
-                <h2 className="font-black text-[#0F172A] mb-4">Permisos por rol</h2>
-                <table className="w-full text-sm">
+                <h2 className="font-black text-[#0F172A] mb-4">Matriz de Autorización por Rol</h2>
+                <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-[#E2E8F0]">
-                      <th className="text-left py-2 pr-4 text-xs font-bold text-[#94A3B8]">Permiso</th>
-                      {ROLES.map(r => <th key={r.name} className="text-center py-2 px-4 text-xs font-bold text-[#94A3B8]">{r.name}</th>)}
+                    <tr className="border-b border-[#E2E8F0] bg-slate-50">
+                      <th className="text-left py-2.5 px-4 font-bold text-[#94A3B8]">Módulo / Recurso</th>
+                      <th className="text-left py-2.5 px-4 font-bold text-[#94A3B8]">Endpoint</th>
+                      <th className="text-center py-2.5 px-4 font-bold text-[#94A3B8]">Ver (GET)</th>
+                      <th className="text-center py-2.5 px-4 font-bold text-[#94A3B8]">Crear (POST)</th>
+                      <th className="text-center py-2.5 px-4 font-bold text-[#94A3B8]">Editar (PUT)</th>
+                      <th className="text-center py-2.5 px-4 font-bold text-[#94A3B8]">Eliminar (DELETE)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F8FAFC]">
-                    {PERMS.map((p, i) => (
-                      <tr key={p}>
-                        <td className="py-2.5 pr-4 text-[#64748B] text-sm">{p}</td>
-                        {ROLES.map(r => <td key={r.name} className="py-2.5 text-center">{r.perms[i] ? <CheckCircle size={15} className="text-emerald-500 mx-auto" /> : <XCircle size={15} className="text-slate-200 mx-auto" />}</td>)}
+                    {roleMatrix.map(row => (
+                      <tr key={row.resource} className="hover:bg-slate-50/50">
+                        <td className="py-3 px-4 font-semibold text-[#0F172A]">{row.resource}</td>
+                        <td className="py-3 px-4 font-mono text-[10px] text-[#64748B]">{row.endpoint}</td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex flex-wrap gap-1 justify-center">
+                            {row.get.length === 0 ? <span className="text-slate-300">—</span> : row.get.map((role: string) => (
+                              <Badge key={role} color={role === 'Administrador' ? 'blue' : role === 'Supervisor' ? 'amber' : 'green'}>{role.slice(0, 5)}</Badge>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex flex-wrap gap-1 justify-center">
+                            {row.post.length === 0 ? <span className="text-slate-300">—</span> : row.post.map((role: string) => (
+                              <Badge key={role} color={role === 'Administrador' ? 'blue' : role === 'Supervisor' ? 'amber' : 'green'}>{role.slice(0, 5)}</Badge>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex flex-wrap gap-1 justify-center">
+                            {row.put.length === 0 ? <span className="text-slate-300">—</span> : row.put.map((role: string) => (
+                              <Badge key={role} color={role === 'Administrador' ? 'blue' : role === 'Supervisor' ? 'amber' : 'green'}>{role.slice(0, 5)}</Badge>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex flex-wrap gap-1 justify-center">
+                            {row.delete.length === 0 ? <span className="text-slate-300">—</span> : row.delete.map((role: string) => (
+                              <Badge key={role} color={role === 'Administrador' ? 'blue' : role === 'Supervisor' ? 'amber' : 'green'}>{role.slice(0, 5)}</Badge>
+                            ))}
+                          </div>
+                        </td>
                       </tr>
                     ))}
+                    {roleMatrix.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="text-center py-6 text-[#94A3B8]">Cargando matriz...</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

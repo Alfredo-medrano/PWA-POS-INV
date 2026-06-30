@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import pool, { checkColumnExists } from '@/lib/db';
 import crypto from 'crypto';
 import axios from 'axios';
 import { requireRole } from '@/lib/auth';
@@ -53,10 +53,30 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { payMethod, emitDTE, dteType, cart, customer } = body;
     
-    // 0. Validar Idempotency Key
+    // 0. Validar Idempotency Key (debe ser un UUID v4 válido)
     const idempotencyKey = request.headers.get('x-idempotency-key') || body.idempotencyKey;
-    if (!idempotencyKey || typeof idempotencyKey !== 'string') {
-      return NextResponse.json({ error: 'La clave de idempotencia es requerida para procesar ventas.' }, { status: 400 });
+    const uuidv4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!idempotencyKey || typeof idempotencyKey !== 'string' || !uuidv4Regex.test(idempotencyKey)) {
+      return NextResponse.json({ error: 'La clave de idempotencia es requerida y debe ser un UUID v4 válido.' }, { status: 400 });
+    }
+
+    const hasIdempotencyKeyCol = await checkColumnExists('ventas', 'idempotency_key');
+
+    // Si la columna no existe, hacemos la verificación manual antes de insertar
+    if (!hasIdempotencyKeyCol) {
+      const dupRes = await pool.query(
+        `SELECT id, dte_status, raw_dte_json FROM ventas WHERE raw_dte_json->>'idempotencyKey' = $1 LIMIT 1`,
+        [idempotencyKey]
+      );
+      if (dupRes.rowCount > 0) {
+        const sale = dupRes.rows[0];
+        return NextResponse.json({
+          exito: true,
+          id: sale.id,
+          controlNum: sale.raw_dte_json?.identificacion?.numeroControl || '',
+          dteStatus: sale.dte_status
+        }, { status: 200 });
+      }
     }
 
     if (!cart || !Array.isArray(cart) || cart.length === 0) {
@@ -116,7 +136,7 @@ export async function POST(request: Request) {
       let statusDte = emitDTE ? 'processing' : 'idle';
 
       // 4. Estructurar JSON inicial del DTE
-      const rawDteJson = {
+      const rawDteJson: any = {
         cajeroId: session.id,
         cajeroName: cashierName,
         identificacion: {
@@ -126,6 +146,7 @@ export async function POST(request: Request) {
           fecEmi: new Date().toISOString().split('T')[0]
         },
         detalles: verifiedCartItems.map(item => ({
+          productId: item.id,
           descripcion: item.name,
           cantidad: item.qty,
           precioUnitario: item.price,
@@ -138,11 +159,22 @@ export async function POST(request: Request) {
         }
       };
 
-      // 5. Crear el registro de venta con total y idempotency_key
-      await client.query(`
-        INSERT INTO ventas (id, total, pay_method, dte_status, dte_type, customer_id, customer_name, raw_dte_json, idempotency_key)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `, [saleId, calculatedTotal, payMethod, statusDte, dteType, customer?.id || null, customer?.name || null, JSON.stringify(rawDteJson), idempotencyKey]);
+      if (!hasIdempotencyKeyCol) {
+        rawDteJson.idempotencyKey = idempotencyKey;
+      }
+
+      // 5. Crear el registro de venta con total (adaptando a presencia de columna idempotency_key)
+      if (hasIdempotencyKeyCol) {
+        await client.query(`
+          INSERT INTO ventas (id, total, pay_method, dte_status, dte_type, customer_id, customer_name, raw_dte_json, idempotency_key)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [saleId, calculatedTotal, payMethod, statusDte, dteType, customer?.id || null, customer?.name || null, JSON.stringify(rawDteJson), idempotencyKey]);
+      } else {
+        await client.query(`
+          INSERT INTO ventas (id, total, pay_method, dte_status, dte_type, customer_id, customer_name, raw_dte_json)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [saleId, calculatedTotal, payMethod, statusDte, dteType, customer?.id || null, customer?.name || null, JSON.stringify(rawDteJson)]);
+      }
 
       // 6. Decrementar el stock de los productos
       for (const item of verifiedCartItems) {
@@ -248,7 +280,11 @@ export async function POST(request: Request) {
 
       // Control de error de clave de idempotencia duplicada (código 23505)
       if (err.code === '23505') {
-        const existingSale = await pool.query('SELECT id, dte_status, raw_dte_json FROM ventas WHERE idempotency_key = $1', [idempotencyKey]);
+        const queryText = hasIdempotencyKeyCol 
+          ? 'SELECT id, dte_status, raw_dte_json FROM ventas WHERE idempotency_key = $1'
+          : `SELECT id, dte_status, raw_dte_json FROM ventas WHERE raw_dte_json->>'idempotencyKey' = $1`;
+        
+        const existingSale = await pool.query(queryText, [idempotencyKey]);
         if (existingSale.rowCount > 0) {
           const sale = existingSale.rows[0];
           return NextResponse.json({

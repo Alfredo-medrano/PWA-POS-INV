@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import pool, { checkColumnExists } from '@/lib/db';
 import crypto from 'crypto';
 import { requireRole } from '@/lib/auth';
 import { handleAuthError } from '@/lib/api-helpers';
@@ -12,17 +12,27 @@ export async function GET() {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const result = await pool.query(`
-      SELECT id, amount, concept, created_at
-      FROM egresos
-      WHERE created_at >= $1
-      ORDER BY created_at DESC
-    `, [startOfToday]);
+    const hasDeletedAt = await checkColumnExists('egresos', 'deleted_at');
+    const hasUserId = await checkColumnExists('egresos', 'user_id');
+
+    let queryText = 'SELECT id, amount, concept';
+    if (hasUserId) {
+      queryText += ', user_id, user_name';
+    }
+    queryText += ', created_at FROM egresos WHERE created_at >= $1';
+    if (hasDeletedAt) {
+      queryText += ' AND deleted_at IS NULL';
+    }
+    queryText += ' ORDER BY created_at DESC';
+
+    const result = await pool.query(queryText, [startOfToday]);
 
     const egresos = result.rows.map(r => ({
       id: r.id,
       amount: parseFloat(r.amount),
       concept: r.concept,
+      userId: hasUserId ? r.user_id : null,
+      userName: hasUserId ? r.user_name : 'Cajero',
       createdAt: r.created_at
     }));
 
@@ -38,7 +48,7 @@ export async function GET() {
 // Registrar un egreso
 export async function POST(request: Request) {
   try {
-    await requireRole(['Administrador', 'Supervisor', 'Cajero']);
+    const session = await requireRole(['Administrador', 'Supervisor', 'Cajero']);
 
     const body = await request.json();
     const { amount, concept } = body;
@@ -52,16 +62,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El monto del egreso debe ser un número positivo.' }, { status: 400 });
     }
 
+    const hasUserId = await checkColumnExists('egresos', 'user_id');
     const id = crypto.randomUUID();
-    await pool.query(`
-      INSERT INTO egresos (id, amount, concept)
-      VALUES ($1, $2, $3)
-    `, [id, numericAmount, concept]);
+
+    let cashierName = 'Cajero';
+    if (hasUserId) {
+      const userRes = await pool.query('SELECT name FROM usuarios WHERE id = $1', [session.id]);
+      cashierName = userRes.rowCount > 0 ? userRes.rows[0].name : 'Cajero';
+    }
+
+    if (hasUserId) {
+      await pool.query(`
+        INSERT INTO egresos (id, amount, concept, user_id, user_name)
+        VALUES ($1, $2, $3, $4, $5)
+      `, [id, numericAmount, concept, session.id, cashierName]);
+    } else {
+      await pool.query(`
+        INSERT INTO egresos (id, amount, concept)
+        VALUES ($1, $2, $3)
+      `, [id, numericAmount, concept]);
+    }
 
     return NextResponse.json({
       id,
       amount: numericAmount,
       concept,
+      userId: hasUserId ? session.id : null,
+      userName: cashierName,
       success: true
     }, { status: 201 });
   } catch (err: any) {

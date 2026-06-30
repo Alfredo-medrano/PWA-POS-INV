@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import axios from "axios";
+import axios from "@/lib/axios-client";
 import { toast, Toaster } from "sonner";
 import { Zap, Lock, RefreshCw, CheckCircle, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { Btn } from "@/app/components/Primitives";

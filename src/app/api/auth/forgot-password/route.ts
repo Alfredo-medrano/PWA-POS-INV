@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit check before any processing
     const ip = getClientIp(request);
-    const rateLimit = checkRateLimit(`forgot:${ip}`, RESET_MAX_ATTEMPTS, RESET_WINDOW_MS);
+    const rateLimit = await checkRateLimit(`forgot:${ip}`, RESET_MAX_ATTEMPTS, RESET_WINDOW_MS);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Demasiados intentos. Intenta de nuevo más tarde.' },
@@ -37,7 +37,12 @@ export async function POST(request: Request) {
     // Resolve tenant ID globally using the email if tenantId is the default 'single'
     if (tenantId === 'single') {
       const globalUserRes = await pool.query('SELECT tenant_id FROM get_user_by_email($1)', [email]);
-      if (globalUserRes.rowCount > 0) {
+      if (globalUserRes.rowCount > 1) {
+        return NextResponse.json({
+          error: 'Este correo electrónico está registrado en múltiples empresas. Por favor, solicita el restablecimiento de tu contraseña desde la URL específica de tu empresa.'
+        }, { status: 409 });
+      }
+      if (globalUserRes.rowCount === 1) {
         resolvedTenantId = globalUserRes.rows[0].tenant_id;
       }
     }

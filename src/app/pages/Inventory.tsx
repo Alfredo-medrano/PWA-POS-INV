@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import {
   Search, Plus, Edit, Download, BoxIcon, ChevronLeft,
-  ChevronRight, TrendingUp, TrendingDown
+  ChevronRight, TrendingUp, TrendingDown, Sliders
 } from "lucide-react";
 import { toast } from "sonner";
+import axios from "axios";
 import { usePOSStore } from "../store/usePOSStore";
 import { Btn, Badge, $, status, CATS } from "../components/Primitives";
 
@@ -18,6 +19,56 @@ export default function Inventory({ onNav }: { onNav: (p: any) => void }) {
   useEffect(() => {
     fetchProducts();
   }, []);
+
+  const [showModal, setShowModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [delta, setDelta] = useState("");
+  const [tipo, setTipo] = useState<"Ingreso" | "Egreso">("Ingreso");
+  const [motivo, setMotivo] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  function openAdjustment(p?: any) {
+    if (p) {
+      setSelectedProduct(p);
+    } else {
+      setSelectedProduct(products[0] || null);
+    }
+    setDelta("");
+    setTipo("Ingreso");
+    setMotivo("");
+    setShowModal(true);
+  }
+
+  async function handleAdjust(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedProduct) {
+      toast.error("Selecciona un producto.");
+      return;
+    }
+    const val = parseInt(delta);
+    if (isNaN(val) || val <= 0) {
+      toast.error("La cantidad debe ser un número entero positivo.");
+      return;
+    }
+
+    const actualDelta = tipo === "Ingreso" ? val : -val;
+    setSubmitting(true);
+    try {
+      await axios.post(`/api/productos/${selectedProduct.id}/ajuste`, {
+        delta: actualDelta,
+        tipo,
+        motivo
+      });
+      toast.success("Ajuste de inventario realizado con éxito.");
+      setShowModal(false);
+      fetchProducts();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Error al realizar ajuste de inventario.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   function toggleSort(k: typeof sortKey) {
     if (sortKey === k) setSortAsc(a => !a);
@@ -53,7 +104,7 @@ export default function Inventory({ onNav }: { onNav: (p: any) => void }) {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Btn v="success" sz="sm" onClick={() => onNav("compras")}><Plus size={13} />Entrada de stock</Btn>
-          <Btn v="secondary" sz="sm" onClick={() => toast.info("Próximamente: Los ajustes manuales de inventario estarán disponibles en una actualización futura.")}><Edit size={13} />Ajuste manual</Btn>
+          <Btn v="secondary" sz="sm" onClick={() => openAdjustment()}><Sliders size={13} />Ajuste manual</Btn>
           <Btn v="secondary" sz="sm" onClick={() => toast.info("Próximamente: Exportación a Excel estará disponible en una actualización futura.")}><Download size={13} />Excel</Btn>
         </div>
       </div>
@@ -105,6 +156,7 @@ export default function Inventory({ onNav }: { onNav: (p: any) => void }) {
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => onNav("productos")} title="Editar producto" className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-[#64748B] transition-colors"><Edit size={13} /></button>
+                        <button onClick={() => openAdjustment(p)} title="Ajuste manual" className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-[#64748B] transition-colors"><Sliders size={13} /></button>
                         <button onClick={() => onNav("compras")} title="Reabastecer" className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-[#64748B] transition-colors"><BoxIcon size={13} /></button>
                       </div>
                     </td>
@@ -123,6 +175,58 @@ export default function Inventory({ onNav }: { onNav: (p: any) => void }) {
           </div>
         </div>
       </div>
+
+    {showModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xl w-full max-w-md p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-[#0F172A]">Ajuste Manual de Inventario</h3>
+              <button onClick={() => setShowModal(false)} className="text-[#94A3B8] hover:text-[#0F172A] font-bold text-lg">×</button>
+            </div>
+
+            <form onSubmit={handleAdjust} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-[#0F172A] block mb-1">Producto</label>
+                <select value={selectedProduct?.id || ""} onChange={e => setSelectedProduct(products.find(p => p.id === e.target.value))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none">
+                  {products.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} (SKU: {p.sku}) - Stock actual: {p.stock}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-[#0F172A] block mb-1">Tipo de Ajuste</label>
+                  <select value={tipo} onChange={e => setTipo(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none">
+                    <option value="Ingreso">Ingreso (+)</option>
+                    <option value="Egreso">Egreso (-)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#0F172A] block mb-1">Cantidad</label>
+                  <input type="number" min="1" step="1" value={delta} onChange={e => setDelta(e.target.value)} required placeholder="Ej. 10"
+                    className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#0F172A] block mb-1">Motivo / Observación</label>
+                <textarea value={motivo} onChange={e => setMotivo(e.target.value)} required placeholder="Ej. Ajuste por merma, Entrada por donación, Inventario inicial..." rows={3}
+                  className="w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none resize-none" />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Btn v="secondary" type="button" className="flex-1 justify-center" onClick={() => setShowModal(false)}>Cancelar</Btn>
+                <Btn v="primary" type="submit" disabled={submitting} className="flex-1 justify-center">
+                  {submitting ? "Procesando..." : "Aplicar Ajuste"}
+                </Btn>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import axios from "@/lib/axios-client";
 import { toast } from "sonner";
 import {
   TrendingUp, Package, Star, Receipt, Users, Truck,
@@ -25,7 +25,11 @@ export default function Reports() {
     purchases,
     fetchPurchases,
     suppliers,
-    fetchSuppliers
+    fetchSuppliers,
+    sales,
+    salesTotalCount,
+    loadingSales,
+    fetchSales
   } = usePOSStore();
 
   const [period, setPeriod] = useState("mes");
@@ -37,6 +41,126 @@ export default function Reports() {
   const [egresoConcept, setEgresoConcept] = useState("");
   const [loadingEgresos, setLoadingEgresos] = useState(false);
   const [submittingEgreso, setSubmittingEgreso] = useState(false);
+
+  // Historial de cierres de caja
+  const [cortesHistory, setCortesHistory] = useState<any[]>([]);
+  const [loadingCortes, setLoadingCortes] = useState(false);
+  const [efectivoContado, setEfectivoContado] = useState("");
+  const [submittingCorte, setSubmittingCorte] = useState(false);
+
+  // Paginación e Historial de Ventas
+  const [salesPage, setSalesPage] = useState(1);
+  const salesLimit = 10;
+
+  // Filtros de ventas
+  const [filterDate, setFilterDate] = useState("");
+  const [filterPayMethod, setFilterPayMethod] = useState("");
+  const [filterDteStatus, setFilterDteStatus] = useState("");
+
+  async function fetchCortesHistory() {
+    setLoadingCortes(true);
+    try {
+      const res = await axios.get("/api/reportes/corte-caja/cerrar");
+      setCortesHistory(res.data || []);
+    } catch (err) {
+      console.error("Error al obtener historial de cortes:", err);
+    } finally {
+      setLoadingCortes(false);
+    }
+  }
+
+  async function handleAddCorte(e: React.FormEvent) {
+    e.preventDefault();
+    if (!efectivoContado) {
+      toast.error("Por favor ingresa el monto de efectivo contado.");
+      return;
+    }
+    const val = parseFloat(efectivoContado);
+    if (isNaN(val) || val < 0) {
+      toast.error("El monto debe ser un número positivo.");
+      return;
+    }
+    setSubmittingCorte(true);
+    try {
+      await axios.post("/api/reportes/corte-caja/cerrar", { efectivoContado: val });
+      toast.success("Cierre de caja registrado exitosamente.");
+      setEfectivoContado("");
+      await fetchCortesHistory();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Error al registrar el cierre de caja.");
+    } finally {
+      setSubmittingCorte(false);
+    }
+  }
+
+  function exportSalesToCSV() {
+    if (sales.length === 0) {
+      toast.error("No hay ventas para exportar.");
+      return;
+    }
+    const headers = ["ID Venta", "Fecha", "Cliente", "Método Pago", "Total", "Estado DTE"];
+    const rows = sales.map(s => [
+      s.id,
+      new Date(s.createdAt).toLocaleString("es-SV"),
+      s.customerName,
+      s.payMethod,
+      s.total.toFixed(2),
+      s.dteStatus
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
+      + [headers.join(","), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `reporte_ventas_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("CSV descargado con éxito.");
+  }
+
+  function exportInventoryToCSV() {
+    if (products.length === 0) {
+      toast.error("No hay productos para exportar.");
+      return;
+    }
+    const headers = ["Producto", "Categoría", "Stock", "Costo", "Precio", "Valor Total (Costo)"];
+    const rows = products.map(p => [
+      p.name,
+      p.category,
+      p.stock.toString(),
+      p.cost.toFixed(2),
+      p.price.toFixed(2),
+      (p.stock * p.cost).toFixed(2)
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
+      + [headers.join(","), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `reporte_inventario_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("CSV de inventario descargado con éxito.");
+  }
+
+  async function handleAnularVenta(id: string) {
+    if (confirm("¿Confirmas la anulación de esta venta? Se emitirá una Nota de Crédito DTE 05 y el stock retornará al inventario.")) {
+      try {
+        const res = await axios.post(`/api/ventas/${id}/anular`);
+        if (res.data.success) {
+          toast.success("Venta anulada con éxito. Nota de crédito emitida.");
+          const offset = (salesPage - 1) * salesLimit;
+          await fetchSales(salesLimit, offset);
+        }
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err.response?.data?.error || "Error al anular la venta.");
+      }
+    }
+  }
 
   async function fetchEgresos() {
     setLoadingEgresos(true);
@@ -80,8 +204,12 @@ export default function Reports() {
   useEffect(() => {
     if (active === "cortes") {
       fetchEgresos();
+      fetchCortesHistory();
+    } else if (active === "historial") {
+      const offset = (salesPage - 1) * salesLimit;
+      fetchSales(salesLimit, offset);
     }
-  }, [active]);
+  }, [active, salesPage]);
 
   useEffect(() => {
     fetchReportsStats(period);
@@ -93,6 +221,7 @@ export default function Reports() {
 
   const types = [
     { id: "ventas",     icon: TrendingUp,  label: "Ventas por período"     },
+    { id: "historial",  icon: Receipt,     label: "Historial de ventas"    },
     { id: "inventario", icon: Package,     label: "Inventario valorizado"  },
     { id: "productos",  icon: Star,        label: "Productos más vendidos"  },
     { id: "cortes",     icon: Receipt,     label: "Cortes de caja"         },
@@ -224,8 +353,11 @@ export default function Reports() {
       {active === "inventario" && (
         <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-6">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <h3 className="font-black text-[#0F172A]">Inventario Valorizado</h3>
-            <span className="text-xs text-[#94A3B8] font-bold">Datos en tiempo real</span>
+            <div>
+              <h3 className="font-black text-[#0F172A]">Inventario Valorizado</h3>
+              <p className="text-xs text-[#94A3B8] mt-0.5">Datos en tiempo real de valorización en bodega</p>
+            </div>
+            <Btn v="secondary" sz="sm" onClick={exportInventoryToCSV}><FileSpreadsheet size={13} /> Exportar CSV</Btn>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
@@ -308,7 +440,7 @@ export default function Reports() {
       )}
 
       {active === "cortes" && (
-        <div className="space-y-5">
+        <div className="space-y-5 animate-in fade-in duration-200">
           <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6">
             <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
               <h3 className="font-black text-[#0F172A]">Corte de Caja Diario (Resumen de Hoy)</h3>
@@ -326,7 +458,28 @@ export default function Reports() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Formulario para registrar cierre */}
+            <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-4">
+              <div>
+                <h3 className="font-black text-[#0F172A]">Realizar Cierre de Caja</h3>
+                <p className="text-xs text-[#94A3B8] mt-0.5">Ingresa el efectivo real contado en caja chica para cuadrar el día</p>
+              </div>
+              <form onSubmit={handleAddCorte} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-[#0F172A] block mb-1.5">Efectivo Físico Contado ($) *</label>
+                  <div className="relative">
+                    <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+                    <input type="number" step="0.01" min="0.00" value={efectivoContado} onChange={e => setEfectivoContado(e.target.value)} placeholder="0.00"
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1B4FD8]/20 focus:border-[#1B4FD8]" />
+                  </div>
+                </div>
+                <Btn v="primary" type="submit" disabled={submittingCorte || !efectivoContado} className="w-full justify-center">
+                  {submittingCorte ? "Registrando..." : "Cerrar Caja y Registrar"}
+                </Btn>
+              </form>
+            </div>
+
             {/* Formulario para registrar egreso */}
             <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-4">
               <div>
@@ -386,6 +539,170 @@ export default function Reports() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+
+          {/* Historial de cierres de caja */}
+          <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-4">
+            <div>
+              <h3 className="font-black text-[#0F172A]">Historial de Cierres de Caja</h3>
+              <p className="text-xs text-[#94A3B8] mt-0.5">Registro histórico de cuadres y diferencias al cierre del día</p>
+            </div>
+            <div className="overflow-x-auto border border-[#E2E8F0] rounded-xl">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 border-b border-[#E2E8F0]">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-bold text-[#94A3B8]">Fecha / Hora</th>
+                    <th className="text-left px-4 py-2.5 font-bold text-[#94A3B8]">Cajero</th>
+                    <th className="text-right px-4 py-2.5 font-bold text-[#94A3B8]">Apertura</th>
+                    <th className="text-right px-4 py-2.5 font-bold text-[#94A3B8]">Efectivo Esperado</th>
+                    <th className="text-right px-4 py-2.5 font-bold text-[#94A3B8]">Efectivo Contado</th>
+                    <th className="text-right px-4 py-2.5 font-bold text-[#94A3B8]">Diferencia</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {cortesHistory.map(c => (
+                    <tr key={c.id} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 text-[#64748B] font-mono">
+                        {new Date(c.createdAt).toLocaleString("es-SV", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-[#0F172A]">{c.userName}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-[#64748B]">{$(c.apertura)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-[#64748B]">{$(c.efectivoEsperado)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-semibold text-[#0F172A]">{$(c.efectivoContado)}</td>
+                      <td className={`px-4 py-3 text-right tabular-nums font-black ${c.diferencia < 0 ? "text-red-600" : c.diferencia > 0 ? "text-emerald-600" : "text-slate-500"}`}>
+                        {c.diferencia > 0 ? `+${$(c.diferencia)}` : $(c.diferencia)}
+                      </td>
+                    </tr>
+                  ))}
+                  {cortesHistory.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="text-center py-8 text-[#94A3B8] font-medium">No hay cierres de caja registrados en el historial.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {active === "historial" && (
+        <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 space-y-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h3 className="font-black text-[#0F172A]">Historial de Ventas</h3>
+              <p className="text-xs text-[#94A3B8] mt-0.5">Consulta y gestiona las transacciones de ventas realizadas</p>
+            </div>
+            <div className="flex gap-2">
+              <Btn v="secondary" sz="sm" onClick={exportSalesToCSV}><FileSpreadsheet size={13} /> Exportar CSV</Btn>
+            </div>
+          </div>
+
+          {/* Filtros */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl border border-[#E2E8F0]">
+            <div>
+              <label className="text-xs font-bold text-[#0F172A] block mb-1">Fecha</label>
+              <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
+                className="w-full px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-[#0F172A] block mb-1">Método de Pago</label>
+              <select value={filterPayMethod} onChange={e => setFilterPayMethod(e.target.value)}
+                className="w-full px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none">
+                <option value="">Todos</option>
+                <option value="Efectivo">Efectivo</option>
+                <option value="Tarjeta">Tarjeta</option>
+                <option value="Transferencia">Transferencia</option>
+                <option value="Mixto">Mixto</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-[#0F172A] block mb-1">Estado DTE</label>
+              <select value={filterDteStatus} onChange={e => setFilterDteStatus(e.target.value)}
+                className="w-full px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none">
+                <option value="">Todos</option>
+                <option value="success">Firmado</option>
+                <option value="pending">Pendiente</option>
+                <option value="rejected">Rechazado</option>
+                <option value="voided">Anulado</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Tabla de ventas */}
+          <div className="overflow-x-auto border border-[#E2E8F0] rounded-xl">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 border-b border-[#E2E8F0]">
+                <tr>
+                  <th className="text-left px-4 py-2.5 font-bold text-[#94A3B8]">ID Venta</th>
+                  <th className="text-left px-4 py-2.5 font-bold text-[#94A3B8]">Fecha / Hora</th>
+                  <th className="text-left px-4 py-2.5 font-bold text-[#94A3B8]">Cliente</th>
+                  <th className="text-left px-4 py-2.5 font-bold text-[#94A3B8]">Método Pago</th>
+                  <th className="text-right px-4 py-2.5 font-bold text-[#94A3B8]">Total</th>
+                  <th className="text-center px-4 py-2.5 font-bold text-[#94A3B8]">DTE</th>
+                  <th className="text-center px-4 py-2.5 font-bold text-[#94A3B8]">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sales
+                  .filter(s => {
+                    if (filterDate) {
+                      const sDate = new Date(s.createdAt).toISOString().split('T')[0];
+                      if (sDate !== filterDate) return false;
+                    }
+                    if (filterPayMethod && s.payMethod !== filterPayMethod) return false;
+                    if (filterDteStatus && s.dteStatus !== filterDteStatus) return false;
+                    return true;
+                  })
+                  .map(s => (
+                    <tr key={s.id} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-mono font-bold text-[#1B4FD8]">{s.id.slice(0, 8)}...</td>
+                      <td className="px-4 py-3 text-[#64748B] font-medium">{s.date} {s.time}</td>
+                      <td className="px-4 py-3 font-semibold text-[#0F172A]">{s.customerName}</td>
+                      <td className="px-4 py-3 text-[#64748B]">{s.payMethod}</td>
+                      <td className="px-4 py-3 text-right font-black text-[#0F172A] tabular-nums">{$(s.total)}</td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge color={s.dteStatus === "success" ? "green" : s.dteStatus === "pending" ? "amber" : s.dteStatus === "voided" ? "red" : "slate"}>
+                          {s.dteStatus === "success" ? "Firmado" : s.dteStatus === "pending" ? "Pendiente" : s.dteStatus === "voided" ? "Anulado" : s.dteStatus}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex gap-2 justify-center">
+                          <button onClick={() => window.open(`/api/ventas/${s.id}/pdf`, '_blank')}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-[#0F172A] rounded font-bold text-[10px] transition-all">
+                            PDF
+                          </button>
+                          {s.dteStatus !== "voided" && (
+                            <button onClick={() => handleAnularVenta(s.id)}
+                              className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded font-bold text-[10px] transition-all">
+                              Anular
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                {sales.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-10 text-[#94A3B8] font-medium">No se encontraron ventas registradas.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Paginación */}
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-xs text-[#94A3B8] font-semibold">Total: {salesTotalCount} ventas</span>
+            <div className="flex gap-2">
+              <Btn v="secondary" sz="xs" disabled={salesPage === 1} onClick={() => setSalesPage(p => p - 1)}>
+                Anterior
+              </Btn>
+              <span className="text-xs font-bold text-[#0F172A] flex items-center px-2">Pág. {salesPage}</span>
+              <Btn v="secondary" sz="xs" disabled={salesPage * salesLimit >= salesTotalCount} onClick={() => setSalesPage(p => p + 1)}>
+                Siguiente
+              </Btn>
             </div>
           </div>
         </div>

@@ -1,10 +1,6 @@
 /**
- * In-memory rate limiter with TTL-based automatic cleanup.
- * 
- * Designed for serverless-compatible environments where Redis is not available.
- * Note: In multi-instance deployments (e.g., multiple serverless containers),
- * each instance maintains its own counter. For distributed rate limiting,
- * consider migrating to Upstash Redis.
+ * Rate limiter with support for Upstash Redis REST pipeline
+ * and automatic fallback to an in-memory TTL Map.
  */
 
 interface RateLimitEntry {
@@ -56,11 +52,45 @@ export interface RateLimitResult {
  * @param windowMs - Time window in milliseconds
  * @returns RateLimitResult indicating whether the request is allowed
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   key: string,
   maxAttempts: number,
   windowMs: number
-): RateLimitResult {
+): Promise<RateLimitResult> {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (url && token) {
+    try {
+      const windowSeconds = Math.ceil(windowMs / 1000);
+      const res = await fetch(`${url}/pipeline`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([
+          ['INCR', key],
+          ['EXPIRE', key, windowSeconds],
+        ]),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // data structure from Upstash REST pipeline is array of results: [{ result: count }, { result: expireStatus }]
+        const count = data[0]?.result || 0;
+        const allowed = count <= maxAttempts;
+        const remaining = Math.max(0, maxAttempts - count);
+        const retryAfter = allowed ? 0 : windowSeconds;
+
+        return { allowed, remaining, retryAfter };
+      }
+    } catch (err) {
+      console.error('❌ Error calling Upstash Redis, falling back to local store:', err);
+    }
+  }
+
+  // Fallback in-memory implementation
   ensureCleanupTimer();
 
   const now = Date.now();

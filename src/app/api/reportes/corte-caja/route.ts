@@ -48,7 +48,8 @@ export async function GET() {
       egresos = parseFloat(egresosRes.rows[0].total_egresos);
     }
 
-    const totalEsperado = apertura + cash + card + transfer - egresos;
+    const totalEsperadoEfectivo = apertura + cash - egresos;
+    const ventasTotalesDia = cash + card + transfer;
 
     return NextResponse.json([
       { l: "Apertura",         v: apertura,    c: "" },
@@ -56,7 +57,8 @@ export async function GET() {
       { l: "Ventas tarjeta",   v: card,    c: "" },
       { l: "Transferencias",   v: transfer,    c: "" },
       { l: "Egresos",          v: -egresos,    c: "text-red-600" },
-      { l: "Total esperado",   v: totalEsperado,   c: "text-[#1B4FD8]" },
+      { l: "Efectivo esperado",v: totalEsperadoEfectivo, c: "text-[#1B4FD8] font-black" },
+      { l: "Ventas totales",   v: ventasTotalesDia, c: "text-emerald-600 font-black" },
     ]);
   } catch (err: any) {
     const authRes = handleAuthError(err);

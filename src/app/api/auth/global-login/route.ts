@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit check before any processing
     const ip = getClientIp(request);
-    const rateLimit = checkRateLimit(`global-login:${ip}`, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_MS);
+    const rateLimit = await checkRateLimit(`global-login:${ip}`, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_MS);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo más tarde.' },
@@ -35,6 +35,13 @@ export async function POST(request: Request) {
     const result = await pool.query('SELECT * FROM get_user_by_email($1)', [email]);
     if (result.rowCount === 0) {
       return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 });
+    }
+
+    // Ajuste 1.2: Controlar colisión de emails en login global
+    if (result.rowCount > 1) {
+      return NextResponse.json({
+        error: 'Este correo electrónico está registrado en múltiples empresas. Por favor, inicia sesión usando la dirección web específica de tu empresa (ej: /t/empresa).'
+      }, { status: 409 });
     }
     
     const u = result.rows[0];
@@ -80,7 +87,7 @@ export async function POST(request: Request) {
     });
 
     // Guardar sesión en cookies de forma firmada criptográficamente
-    response.cookies.set('pos_session', await signSession({ id: u.id, role: u.role, tenantId: u.tenant_id }), {
+    response.cookies.set('pos_session', await signSession({ id: u.id, role: u.role, tenantId: u.tenant_id, trialExpired }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

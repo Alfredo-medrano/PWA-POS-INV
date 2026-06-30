@@ -24,11 +24,12 @@ export function DTEPill({ on }: { on: boolean }) {
 }
 
 // ─── Btn ──────────────────────────────────────────────────────────────────────
-export function Btn({ v = "primary", sz = "md", children, onClick, disabled, full, className = "" }: {
+export function Btn({ v = "primary", sz = "md", children, onClick, disabled, full, className = "", type = "button" }: {
   v?: "primary" | "secondary" | "danger" | "ghost" | "success";
   sz?: "xs" | "sm" | "md" | "lg";
   children: React.ReactNode; onClick?: () => void;
   disabled?: boolean; full?: boolean; className?: string;
+  type?: "button" | "submit" | "reset";
 }) {
   const base = "inline-flex items-center justify-center gap-1.5 font-semibold rounded-lg transition-all focus:outline-none disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap";
   const variants = {
@@ -40,7 +41,7 @@ export function Btn({ v = "primary", sz = "md", children, onClick, disabled, ful
   }[v];
   const sizes = { xs: "px-2 py-1 text-xs", sm: "px-3 py-1.5 text-xs", md: "px-4 py-2 text-sm", lg: "px-5 py-2.5 text-sm" }[sz];
   return (
-    <button className={`${base} ${variants} ${sizes} ${full ? "w-full" : ""} ${className}`} onClick={onClick} disabled={disabled}>
+    <button type={type} className={`${base} ${variants} ${sizes} ${full ? "w-full" : ""} ${className}`} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   );

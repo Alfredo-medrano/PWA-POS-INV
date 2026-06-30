@@ -2,6 +2,7 @@ export interface SessionData {
   id: string;
   role: string;
   tenantId: string;
+  trialExpired?: boolean;
 }
 
 // Internal payload type includes expiration — callers never see this directly

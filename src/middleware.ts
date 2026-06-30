@@ -42,6 +42,20 @@ export async function middleware(request: NextRequest) {
         );
       }
 
+      // Ajuste 2.4: Enforcement de trial expirado en middleware
+      if (verified.trialExpired && verified.role !== 'Administrador') {
+        const isAllowedDuringExpired =
+          pathname === '/api/auth/logout' ||
+          (pathname === '/api/configuracion' && method === 'GET');
+
+        if (!isAllowedDuringExpired) {
+          return NextResponse.json(
+            { error: 'Licencia demo expirada. Por favor contacta al administrador para renovar o realizar el pago.' },
+            { status: 403 }
+          );
+        }
+      }
+
       // Inyectar cabeceras seguras una vez verificado el token
       requestHeaders.set('x-tenant-id', verified.tenantId);
       requestHeaders.set('x-user-role', verified.role);

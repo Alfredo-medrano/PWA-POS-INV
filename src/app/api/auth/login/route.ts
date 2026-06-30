@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit check before any processing
     const ip = getClientIp(request);
-    const rateLimit = checkRateLimit(`login:${ip}`, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_MS);
+    const rateLimit = await checkRateLimit(`login:${ip}`, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_MS);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo más tarde.' },
@@ -32,12 +32,19 @@ export async function POST(request: Request) {
     }
 
     // Resolver slug o ID a la clave física UUID del tenant
-    const tenantRes = await pool.query('SELECT id, slug FROM tenants WHERE id = $1 OR slug = $1', [tenantId]);
+    const tenantRes = await pool.query('SELECT id, slug, plan, status, trial_ends_at FROM tenants WHERE id = $1 OR slug = $1', [tenantId]);
     if (tenantRes.rowCount === 0) {
       return NextResponse.json({ error: 'Empresa no registrada' }, { status: 404 });
     }
-    const resolvedTenantId = tenantRes.rows[0].id;
-    const resolvedTenantSlug = tenantRes.rows[0].slug;
+    const tenant = tenantRes.rows[0];
+    const resolvedTenantId = tenant.id;
+    const resolvedTenantSlug = tenant.slug;
+
+    // Verificar si la demo expiró
+    let trialExpired = false;
+    if (tenant.plan === 'demo' && new Date(tenant.trial_ends_at) < new Date()) {
+      trialExpired = true;
+    }
 
     // Buscar al usuario dentro del contexto del tenant especificado
     const result = await runWithTenant(resolvedTenantId, () =>
@@ -58,7 +65,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El usuario está inactivo' }, { status: 403 });
     }
     
-    // Crear respuesta con cookie pos_session que incluye el resolvedTenantId
+    // Crear respuesta con cookie pos_session que incluye el resolvedTenantId y trialExpired
     const response = NextResponse.json({ 
       id: u.id, 
       name: u.name, 
@@ -66,10 +73,11 @@ export async function POST(request: Request) {
       role: u.role, 
       status: u.status,
       tenantId: u.tenant_id,
-      tenantSlug: resolvedTenantSlug
+      tenantSlug: resolvedTenantSlug,
+      trialExpired
     });
     
-    response.cookies.set('pos_session', await signSession({ id: u.id, role: u.role, tenantId: u.tenant_id }), {
+    response.cookies.set('pos_session', await signSession({ id: u.id, role: u.role, tenantId: u.tenant_id, trialExpired }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
